@@ -1,17 +1,16 @@
-
-
 use core::panic;
 
 use nom::{
     IResult,
-    bytes::complete::{tag, take_while, is_not}, sequence::{tuple, delimited}, character::complete::{digit1, multispace0}, combinator::value, error::ParseError,
+    bytes::complete::{tag, take_while, is_not}, sequence::{tuple, delimited}, character::complete::{digit1, multispace0, alphanumeric1}, combinator::value, error::ParseError, branch::alt,
 };
 
 use crate::{language_types::annotations::*};
 
 pub enum Annotation {
-    DefineAnnotation(DefineAnnotation),
-    VersionAnnotation(VersionAnnotation)
+    DA(DefineAnnotation),
+    VA(VersionAnnotation),
+    IA(Option<String>)
 }
 
 fn annotation_parser(input: &str) -> IResult<&str, Annotation> {
@@ -22,7 +21,11 @@ fn annotation_parser(input: &str) -> IResult<&str, Annotation> {
     match annotation {
         "version" => {
             let (input, (major_version, minor_version)) = version_parser(input)?;
-            Ok((input, Annotation::VersionAnnotation(VersionAnnotation{major_version, minor_version})))
+            Ok((input, Annotation::VA(VersionAnnotation{major_version, minor_version})))
+        }
+        "include" => {
+            let (input, include) = include_parser(input)?;
+            Ok((input, Annotation::IA(include)))
         }
         _ => panic!("Unknown annotation")
     }
@@ -61,6 +64,19 @@ fn comment_parser(input: &str) -> IResult<&str, ()>{
         )
     )(input)
 }
+
+fn include_parser(input: &str) -> IResult<&str, Option<String>> {
+
+    
+    let (input, include) = delimited(tag("\""), alt((alphanumeric1, tag("*"), tag("?"), tag("/"))), tag("\""))(input)?;
+    
+    // ignore scl-root (scl.conf, scl/) as they are implementation details
+    if include.contains("scl.conf") || include.contains("scl/") {
+        Ok((input, None))
+    } else {
+        Ok((input, Some(include.to_owned())))
+    }
+ }
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and 
 /// trailing whitespace, returning the output of `inner`.

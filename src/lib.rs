@@ -1,25 +1,35 @@
 pub mod language_types;
 pub mod parser;
-mod ast;
+pub mod ast;
+mod file_utilities;
 
+use std::sync::{Arc, RwLock};
+
+use ast::SyslogNgConfiguration;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-#[derive(Debug)]
 pub struct Backend {
     pub client: Client,
-    pub configuration_content: String
+    pub configuration: &'static Arc<RwLock<SyslogNgConfiguration>>
 }
 
 impl Backend {
 
-    fn init_configuraton(&mut self, configuration: &str){
-        self.configuration_content = configuration.to_string();
+    fn init_configuraton(&self, configuration: &str, URI: &TextDocumentIdentifier) {
+        let config_lock = &self.configuration.clone();
+
+        if let Ok(mut write_guard) = config_lock.write() {
+            let mut assembled_config = &mut *write_guard;
+            &assembled_config.add_configuration(&configuration, &URI);
+        };
     }
 
-    // fn update_configuration(&mut self, )
+    fn update_configuration(&self) {}
+
+    fn process_config(&self) {}
 
     
 }

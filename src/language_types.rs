@@ -3,6 +3,8 @@ pub mod annotations{
         pub key: String,
         pub value: String
     }
+
+    #[derive(Debug)]
     pub struct VersionAnnotation{
         pub major_version: u8,
         pub minor_version: u8,
@@ -18,6 +20,7 @@ pub mod annotations{
     }
 }
 
+#[derive(Debug)]
 pub struct GlobalOption {
     name: String
 }
@@ -39,24 +42,11 @@ pub enum ObjectKind{
 
     }
 
-    pub trait Object {
+    pub trait Object: std::fmt::Debug {
         fn get_id(&self) -> &str;
         fn get_optional_parameters(&self) -> Vec<Parameter>;
         fn get_mandatory_parameters(&self) -> Vec<Parameter>;
         fn get_kind(&self) -> ObjectKind;
     }
-
-
-    // Abstract Class(Object)
-    // doSomething()
-
-    // Source : Object
-    // override doSomething()
-
-    // Destination : Object
-    // override doSomething()
-
-    
-    // Rewrite : Object
 
 }

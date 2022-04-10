@@ -1,10 +1,21 @@
-use tower_lsp::{LspService, Server};
+use std::sync::{Arc, RwLock};
 
-use lsp_syslog_ng::Backend;
+use tower_lsp::{LspService, Server};
+use once_cell::sync::OnceCell;
+
+use lsp_syslog_ng::{Backend, ast::SyslogNgConfiguration};
+
+extern crate glob;
+
+
+static CONFIGURATION: OnceCell<Arc<RwLock<SyslogNgConfiguration>>> = OnceCell::new();
 
 
 #[tokio::main]
 async fn main() {
+
+    // Empty configuration
+
     #[cfg(feature = "runtime-agnostic")]
     use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
@@ -14,7 +25,9 @@ async fn main() {
     #[cfg(feature = "runtime-agnostic")]
     let (stdin, stdout) = (stdin.compat(), stdout.compat_write());
 
-    let (service, messages) = LspService::new(|client| Backend { client });
+    CONFIGURATION.set(SyslogNgConfiguration::new()).expect("Global initialization failed");
+    
+    let (service, messages) = LspService::new(|client| Backend { client, configuration: &CONFIGURATION.get().expect("Acquiring configuration failed") });
     Server::new(stdin, stdout)
         .interleave(messages)
         .serve(service)
