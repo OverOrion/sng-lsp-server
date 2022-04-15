@@ -7,6 +7,7 @@ mod file_utilities;
 use std::sync::{Arc, RwLock};
 
 use ast::SyslogNgConfiguration;
+use grammar::grammar_get_all_options;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -31,6 +32,32 @@ impl Backend {
     fn update_configuration(&self) {}
 
     fn process_config(&self) {}
+
+    
+    fn transform_grammar_element_to_completion_response(inp: &str) -> CompletionItem {
+        // inp := "option_name"("<option_type>")
+        
+        CompletionItem::new_simple(inp.to_string(), "some_details".to_owned())
+    }
+    
+    pub fn get_possible_objects_completion(&self) -> Option<CompletionResponse> {
+
+        let results = grammar_get_all_options("source", "tcp")?;
+
+        let mut response = Vec::new();
+
+        for kv in results {
+            let item = Backend::transform_grammar_element_to_completion_response(&kv);
+            response.push(item);
+        }
+
+        if response.len() > 0 {
+            return Some(CompletionResponse::Array(response));
+
+        }else {
+            None
+        }
+    }
 
     
 }
