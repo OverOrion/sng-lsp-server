@@ -1,6 +1,7 @@
 pub mod language_types;
 pub mod parser;
 pub mod ast;
+pub mod grammar;
 mod file_utilities;
 
 use std::sync::{Arc, RwLock};

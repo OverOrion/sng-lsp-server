@@ -2,8 +2,10 @@ use core::panic;
 
 use nom::{
     IResult,
-    bytes::complete::{tag, take_while, is_not}, sequence::{tuple, delimited}, character::complete::{digit1, multispace0, alphanumeric1}, combinator::value, error::ParseError, branch::alt,
+    bytes::complete::{tag, take_while, is_not}, sequence::{tuple, delimited}, character::complete::{digit1, multispace0, alphanumeric1}, combinator::value,
+    error::{ParseError, ErrorKind, Error}, branch::alt, number::complete::double, multi::separated_list1,
 };
+use serde_json::Value;
 
 use crate::{language_types::annotations::*};
 
@@ -11,6 +13,17 @@ pub enum Annotation {
     DA(DefineAnnotation),
     VA(VersionAnnotation),
     IA(Option<String>)
+}
+
+pub enum ValueTypes {
+    YesNo(bool),
+    PositiveInteger(usize),
+    NonNegativeInteger(usize),
+    StringOrNumber(String),
+    Path(String),
+    String(String),
+    StringList(Vec<String>),
+    // TemplateContent(String)
 }
 
 fn annotation_parser(input: &str) -> IResult<&str, Annotation> {
@@ -90,7 +103,123 @@ F: Fn(&'a str) -> IResult<&'a str, O, E>,
         inner,
         multispace0
     )
-}    
+}
+
+
+fn parse_value_yesno(input: &str) -> IResult<&str, ValueTypes> {
+
+    let (input, yesno) = alt((
+                                        tag("1"),
+                                        tag("0"),
+
+                                        tag("yes"),
+                                        tag("no"),
+                                    ))(input)?;
+    
+    let val = yesno;
+
+
+    match val {
+            "1" | "yes" | "on"  =>  Ok((input, ValueTypes::YesNo(true))),
+            "0" | "no"  | "off" =>  Ok((input, ValueTypes::YesNo(false))),
+
+            _           =>  {
+                let truthy_value = val.parse::<isize>();
+                if let Ok(truthy_value) = truthy_value {
+                    Ok((input, ValueTypes::YesNo(truthy_value > 0)))
+                }
+                else {
+                    Err(nom::Err::Failure(Error::new(input, ErrorKind::Alt)))
+                }
+            }
+        }
+}
+
+fn parse_value_positive_integer(input: &str) -> IResult<&str, ValueTypes> {
+    let (input, pos_int) = digit1(input)?;
+
+    match pos_int.parse::<usize>() {
+        Ok(n) => {
+            if n > 0 {
+                Ok((input, ValueTypes::PositiveInteger(n)))
+            } else {
+                Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit)))
+            }
+        },
+        _           => Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit)))
+
+    }
+}
+
+fn parse_value_non_negative_integer(input: &str) -> IResult<&str, ValueTypes> {
+    let (input, pos_int) = digit1(input)?;
+
+    match pos_int.parse::<usize>() {
+        Ok(n) => Ok((input, ValueTypes::PositiveInteger(n))),
+        _           => Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit)))
+
+    }
+}
+
+fn parse_value_string_or_number(input: &str) -> IResult<&str, ValueTypes> {
+
+    let num_or_string: Result<(&str, f64), nom::Err<(&str, ErrorKind)>> = alt(
+        ((delimited(tag("\""), double, tag("\""))), double))
+        (input);
+    
+    match num_or_string {
+        Ok((input, d)) => Ok((input, ValueTypes::StringOrNumber(d.to_string()))),
+        _                        => Err(nom::Err::Failure(Error::new(input, ErrorKind::Float)))
+    }
+}
+
+fn parse_value_string(input: &str) -> IResult<&str, ValueTypes> {
+    let str: Result<(&str, &str), nom::Err<(&str, ErrorKind)>> = delimited(tag("\""), is_not(":"), tag("\""))(input);
+
+    match str {
+        Ok((input, str)) => Ok((input, ValueTypes::String(str.to_string()))),
+        _                            => Err(nom::Err::Failure(Error::new(input, ErrorKind::Not)))
+
+    }
+}
+
+fn parse_value_string_list(input: &str) -> IResult<&str, ValueTypes> {
+    let delim = ":";
+    let str_list: Result<(&str, Vec<&str>), nom::Err<(&str, ErrorKind)>> = separated_list1(tag(delim), is_not(delim))(input);
+
+    match str_list {
+        Ok((input, list)) => {
+            let mut result = Vec::new();
+            for str in list.into_iter(){
+                result.push(str.to_string());
+            }
+            Ok((input, ValueTypes::StringList(result)))
+        },
+        
+        _                                => Err(nom::Err::Failure(Error::new(input, ErrorKind::SeparatedNonEmptyList)))
+
+    }
+
+
+}
+
+
+fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
+    let value = delimited(
+                        tag("("),
+                             alt((
+                                        parse_value_yesno,
+                                        parse_value_positive_integer, parse_value_non_negative_integer, parse_value_string_or_number,
+                                        parse_value_string,
+                                        parse_value_string_list)
+                            ),
+                             tag(")"))(input);
+    match value {
+                Ok((input, val)) => Ok((input, val)),
+                _                                => Err(nom::Err::Failure(Error::new(input, ErrorKind::Fail)))
+    }
+}
+
 
 // fn parse_configuration(input: &str) -> IResult<&str, Box<dyn ParsedConfiguration>>{
 
