@@ -1,9 +1,11 @@
 
 use std::{sync::{RwLock, Arc}, ops::Range};
+use std::convert::From;
 
-use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, Url, MessageType};
 
-use crate::language_types::{objects::{Object, ObjectKind}, GlobalOption, annotations::VersionAnnotation};
+use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, Url, MessageType, CompletionItem};
+
+use crate::{language_types::{objects::{Object, ObjectKind}, GlobalOption, annotations::VersionAnnotation}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}};
 
 
 pub struct LSPMessage {
@@ -11,7 +13,34 @@ pub struct LSPMessage {
     pub message: String
 }
 
+pub enum Context {
+    Root,
 
+    // Same as enum ObjectKind {}
+    Source,
+    Destination,
+    Log,
+    Filter,
+    Parser,
+    RewriteRule,
+    Template
+}
+
+impl From<ObjectKind> for Context {
+    fn from (item: ObjectKind) -> Self {
+        match item {
+                ObjectKind::Source => Context::Source,
+                ObjectKind::Destination => Context::Destination,
+                ObjectKind::Log => Context::Log,
+                ObjectKind::Filter => Context::Filter,
+                ObjectKind::Parser => Context::Parser,
+                ObjectKind::RewriteRule => Context::RewriteRule,
+                ObjectKind::Template => Context::Template,
+
+                _ => Context::Root
+        }
+    }
+}
 
 pub trait AST{
     fn get_global_options(&self) -> &Vec<GlobalOption>;
@@ -128,6 +157,11 @@ impl SyslogNgConfiguration {
         self.snippets.push(snippet);
 
     }
+
+    pub fn transform_grammar_option_to_completion_response(label: &str, details: &str) -> CompletionItem {
+        // inp := option_name(<option_type>)
+        CompletionItem::new_simple(label.to_string(), details.to_owned())
+    }
 }
 
 impl AST for SyslogNgConfiguration {
@@ -153,7 +187,10 @@ pub trait ParsedConfiguration: AST {
     fn validate(&self);
     
     fn get_diagnostics(&self) -> Vec<Diagnostic>;
-    fn get_code_completion(&self, params: &CompletionParams) -> Option<Vec<CompletionResponse>>;
+    fn get_code_completion(&self, params: &CompletionParams) -> Option<CompletionResponse>;
+    fn get_context(&self, params: &CompletionParams) -> Context;
+
+    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> bool;
 
 
     fn apply_diff(&mut self, content_changes: DidChangeTextDocumentParams);
@@ -171,11 +208,80 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         todo!()
     }
 
-    fn get_code_completion(&self, params: &CompletionParams) -> Option<Vec<CompletionResponse>> {
-        todo!()
+    fn get_code_completion(&self, params: &CompletionParams) -> Option<CompletionResponse> {
+        let mut response:Vec<CompletionItem> = Vec::new();
+        let mut object_type = String::from("");
+        
+
+
+        let context = ParsedConfiguration::get_context(self, params);
+
+        match context {
+            Context::Root => {
+                for kw in grammar_get_root_level_keywords().into_iter() {
+                    let item = SyslogNgConfiguration::transform_grammar_option_to_completion_response(*kw, *kw);
+                    response.push(item);
+                }
+                return Some(CompletionResponse::Array(response));
+            }
+
+            Context::Source => {    
+
+
+            },
+            Context::Destination => todo!(),
+            Context::Parser => todo!(),
+
+            Context::Log => todo!(),
+
+            Context::Filter => todo!(),
+            Context::RewriteRule => todo!(),
+            Context::Template => todo!(),
+        }
+
+        // from db
+        let results = grammar_get_all_options("destination", "tcp")?;
+
+        let mut response = Vec::new();
+
+        for kv in results {
+            let item = SyslogNgConfiguration::transform_grammar_option_to_completion_response(&kv);
+            response.push(item);
+        }
+
+        if response.len() > 0 {
+            Some(CompletionResponse::Array(response))
+
+        }else {
+            None
+        }
+
+        // from user
     }
 
     fn apply_diff(&mut self, content_changes: DidChangeTextDocumentParams) {
         todo!()
     }
+    
+
+    fn get_context(&self, params: &CompletionParams) -> Context {
+        let text_document_position = &params.text_document_position;
+
+        for obj in self.get_objects() {
+            if obj.contains_document_position(text_document_position) {
+                return Context::from(obj.get_kind());
+            }
+        }
+
+        // root
+        Context::Root
+    }
+
+    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> bool {
+
+        if 
+
+        false
+    }
+    
 }

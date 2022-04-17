@@ -114,6 +114,11 @@ fn parse_value_yesno(input: &str) -> IResult<&str, ValueTypes> {
 
                                         tag("yes"),
                                         tag("no"),
+
+                                        tag("on"),
+                                        tag("off"),
+
+                                        digit1
                                     ))(input)?;
     
     let val = yesno;
@@ -204,7 +209,7 @@ fn parse_value_string_list(input: &str) -> IResult<&str, ValueTypes> {
 }
 
 
-fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
+pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
     let value = delimited(
                         tag("("),
                              alt((

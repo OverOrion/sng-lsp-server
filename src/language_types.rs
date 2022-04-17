@@ -26,6 +26,10 @@ pub struct GlobalOption {
 }
 
 pub mod objects{
+    use tower_lsp::lsp_types::TextDocumentPositionParams;
+
+    use crate::ast::Context;
+
 
     #[derive(PartialEq, Eq)]
 pub enum ObjectKind{
@@ -47,6 +51,7 @@ pub enum ObjectKind{
         fn get_optional_parameters(&self) -> Vec<Parameter>;
         fn get_mandatory_parameters(&self) -> Vec<Parameter>;
         fn get_kind(&self) -> ObjectKind;
+        fn contains_document_position(&self, text_document_position: &TextDocumentPositionParams) -> bool;
     }
 
 }

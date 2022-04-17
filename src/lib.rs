@@ -4,15 +4,20 @@ pub mod ast;
 pub mod grammar;
 mod file_utilities;
 
-use core::panic;
+
 use std::sync::{Arc, RwLock};
 
 use ast::SyslogNgConfiguration;
 use grammar::{grammar_init, grammar_get_all_options};
 use serde_json::Value;
-use tower_lsp::jsonrpc::Result;
+use tower_lsp::jsonrpc::{Result, Error};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
+
+
+pub enum ServerErrorCodes {
+    CompletionError = 0,
+}
 
 pub struct Backend {
     pub client: Client,
@@ -34,29 +39,16 @@ impl Backend {
 
     fn process_config(&self) {}
 
-    
-    fn transform_grammar_option_to_completion_response(inp: &str) -> CompletionItem {
-        // inp := option_name(<option_type>)
-        CompletionItem::new_simple(inp.to_string(), "some_details".to_owned())
+    fn get_context(&self, text_position: &TextDocumentPositionParams) {
+
+
     }
+
     
-    pub fn get_possible_objects_completion(&self) -> Option<CompletionResponse> {
+    
+    pub fn get_possible_completion(&self, params: &CompletionParams) -> Option<CompletionResponse> {
+        
 
-        let results = grammar_get_all_options("destination", "tcp")?;
-
-        let mut response = Vec::new();
-
-        for kv in results {
-            let item = Backend::transform_grammar_option_to_completion_response(&kv);
-            response.push(item);
-        }
-
-        if response.len() > 0 {
-            Some(CompletionResponse::Array(response))
-
-        }else {
-            None
-        }
     }
 
     
@@ -169,7 +161,7 @@ impl LanguageServer for Backend {
             // CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
         // ])))
         grammar_init();
-        let res = Backend::get_possible_objects_completion(&self);
+        let res = Backend::get_possible_completion(&self, &params);
 
         match res {
 
@@ -177,8 +169,9 @@ impl LanguageServer for Backend {
                 Ok(Some(val))
             },
 
-            _ => Ok(Some(CompletionResponse::Array(vec![CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
-                CompletionItem::new_simple("Bye".to_string(), "More detail".to_string())])))
+            None => Ok(None)
+
+            // _ => Err(Error::new(tower_lsp::jsonrpc::ErrorCode::ServerError(ServerErrorCodes::CompletionError as i64)))
         }
     }
 }
