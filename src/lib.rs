@@ -35,8 +35,8 @@ impl Backend {
     fn process_config(&self) {}
 
     
-    fn transform_grammar_element_to_completion_response(inp: &str) -> CompletionItem {
-        // inp := "option_name"("<option_type>")
+    fn transform_grammar_option_to_completion_response(inp: &str) -> CompletionItem {
+        // inp := option_name(<option_type>)
         CompletionItem::new_simple(inp.to_string(), "some_details".to_owned())
     }
     
@@ -47,7 +47,7 @@ impl Backend {
         let mut response = Vec::new();
 
         for kv in results {
-            let item = Backend::transform_grammar_element_to_completion_response(&kv);
+            let item = Backend::transform_grammar_option_to_completion_response(&kv);
             response.push(item);
         }
 
