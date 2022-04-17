@@ -4,10 +4,11 @@ pub mod ast;
 pub mod grammar;
 mod file_utilities;
 
+use core::panic;
 use std::sync::{Arc, RwLock};
 
 use ast::SyslogNgConfiguration;
-use grammar::grammar_get_all_options;
+use grammar::{grammar_init, grammar_get_all_options};
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -36,13 +37,12 @@ impl Backend {
     
     fn transform_grammar_element_to_completion_response(inp: &str) -> CompletionItem {
         // inp := "option_name"("<option_type>")
-        
         CompletionItem::new_simple(inp.to_string(), "some_details".to_owned())
     }
     
     pub fn get_possible_objects_completion(&self) -> Option<CompletionResponse> {
 
-        let results = grammar_get_all_options("source", "tcp")?;
+        let results = grammar_get_all_options("destination", "tcp")?;
 
         let mut response = Vec::new();
 
@@ -52,7 +52,7 @@ impl Backend {
         }
 
         if response.len() > 0 {
-            return Some(CompletionResponse::Array(response));
+            Some(CompletionResponse::Array(response))
 
         }else {
             None
@@ -164,9 +164,21 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         self.client.log_message(MessageType::INFO, format!("{:?}", params));
-        Ok(Some(CompletionResponse::Array(vec![
-            CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
-            CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
-        ])))
+        // Ok(Some(CompletionResponse::Array(vec![
+           // CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
+            // CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
+        // ])))
+        grammar_init();
+        let res = Backend::get_possible_objects_completion(&self);
+
+        match res {
+
+            Some(val) => {
+                Ok(Some(val))
+            },
+
+            _ => Ok(Some(CompletionResponse::Array(vec![CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
+                CompletionItem::new_simple("Bye".to_string(), "More detail".to_string())])))
+        }
     }
 }

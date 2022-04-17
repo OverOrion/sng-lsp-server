@@ -1,9 +1,9 @@
-use std::sync::{Arc, RwLock};
+use std::{sync::{Arc, RwLock}, env};
 
 use tower_lsp::{LspService, Server};
 use once_cell::sync::OnceCell;
 
-use lsp_syslog_ng::{Backend, ast::SyslogNgConfiguration};
+use lsp_syslog_ng::{Backend, ast::SyslogNgConfiguration, grammar::{grammar_get_all_options, grammar_init}};
 
 extern crate glob;
 
@@ -13,6 +13,9 @@ static CONFIGURATION: OnceCell<Arc<RwLock<SyslogNgConfiguration>>> = OnceCell::n
 
 #[tokio::main]
 async fn main() {
+
+    env::set_var("RUST_BACKTRACE", "1");
+
 
     // Empty configuration
 
@@ -32,4 +35,5 @@ async fn main() {
         .interleave(messages)
         .serve(service)
         .await;
+
 }

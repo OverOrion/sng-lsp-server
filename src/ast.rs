@@ -83,7 +83,7 @@ impl Snippet {
 #[derive(Debug)]
 pub struct SyslogNgConfiguration {
     configuration: String,
-    configuration_URI: TextDocumentIdentifier,
+    // configuration_URI: TextDocumentIdentifier,
     version: VersionAnnotation,
     snippets: Vec<Snippet>,
 
@@ -101,7 +101,7 @@ impl SyslogNgConfiguration {
                 major_version: 0,
                 minor_version: 0
             },
-            configuration_URI: TextDocumentIdentifier::new(Url::parse("syslog-ng.conf").unwrap()),
+            // configuration_URI: TextDocumentIdentifier::new(Url::parse("syslog-ng.conf").unwrap()),
             snippets: Vec::new(),
 
             is_valid: false,
@@ -120,7 +120,7 @@ impl SyslogNgConfiguration {
         // if has @version => main config
         if conf.contains("@version") {
             self.configuration.push_str(conf);
-            self.configuration_URI = URI.clone();
+            // self.configuration_URI = URI.clone();
         }
     }
 
