@@ -1,17 +1,12 @@
 
-use std::{sync::{RwLock, Arc}, ops::Range};
-use std::convert::From;
+use std::{cmp::Ordering, convert::From, sync::{RwLock, Arc}, collections::HashMap};
 
 
-use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, Url, MessageType, CompletionItem};
+use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, CompletionItem, self, DiagnosticSeverity};
 
-use crate::{language_types::{objects::{Object, ObjectKind}, GlobalOption, annotations::VersionAnnotation}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}};
+use crate::{language_types::{objects::{Object, ObjectKind}, GlobalOption, annotations::VersionAnnotation}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::try_parse_snippet};
 
 
-pub struct LSPMessage {
-    pub message_type: MessageType,
-    pub message: String
-}
 
 pub enum Context {
     Root,
@@ -26,8 +21,8 @@ pub enum Context {
     Template
 }
 
-impl From<ObjectKind> for Context {
-    fn from (item: ObjectKind) -> Self {
+impl From<&ObjectKind> for Context {
+    fn from (item: &ObjectKind) -> Self {
         match item {
                 ObjectKind::Source => Context::Source,
                 ObjectKind::Destination => Context::Destination,
@@ -44,60 +39,105 @@ impl From<ObjectKind> for Context {
 
 pub trait AST{
     fn get_global_options(&self) -> &Vec<GlobalOption>;
-    fn get_objects(&self) -> &Vec<Box< dyn Object + Send + Sync>>;
+    fn get_objects(&self) -> &Vec<Box<Object>>;
 
-    fn get_objects_by_kind(&self, kind: ObjectKind) -> Vec<&Box<dyn Object + Send + Sync>>;
+    fn get_objects_by_kind(&self, kind: &ObjectKind) -> Vec<&Box<Object>>;
 }
+
+
 
 #[derive(Debug)]
 pub struct Snippet {
     pub content: String,
-    pub include_position: Position,
-    pub include_range: Range<Position>,
-    snippet_URI: TextDocumentIdentifier,
-
-    pub merged_content: String,
+    pub include_range: lsp_types::Range,
+    pub snippet_uri: TextDocumentIdentifier,
+    pub diagnostics: Vec<Diagnostic>,
 
     pub included_snippets: Option<Vec<Snippet>>,
+    pub resolved_content: String,
     pub depth: u8
 }
 
 impl Snippet {
 
-    fn resolve_include(&mut self, depth: u8) -> Result<(), LSPMessage>{
+    fn check_possible_errors(&self, depth: u8) -> Option<Diagnostic> {
         const MAX_DEPTH: u8 = 15;
+        let source = "syslog-ng LSP server";
 
         if depth > MAX_DEPTH {
-            Err(LSPMessage {
-                message_type: MessageType::ERROR,
-                message: format!("Include limit ({}) has been reached, diagnostics might be unreliable", MAX_DEPTH)
-            })
-        
-        } else if self.content.contains("@version") {
-            Err(LSPMessage{
-                message_type: MessageType::ERROR,
-                message: format!("Snippets can not contain @version")
-
-            })
-
-        } else {
-            if self.has_includes() {
-                // recursively 
-
-                // get list of included files
-
-                // sort them
-                
-                // resolve them
-
-            }
-
-
-            // resolve self
-            //parse_snippet(&self);
-
-            Ok(())
+            return Some(Diagnostic::new(
+                    self.get_whole_content_range(),
+                    Some(DiagnosticSeverity::ERROR),
+                    None,
+                    Some(source.to_string()),
+                    format!("Include limit ({}) has been reached, diagnostics might be unreliable. Make sure there are no circular @include directives", MAX_DEPTH),
+                    None,
+                    None
+                ));
         }
+        
+        if let Some(version_range) = self.get_range_by_pattern("@version") {
+            return Some(
+                Diagnostic::new(
+                    version_range,
+                    Some(DiagnosticSeverity::ERROR),
+                    None,
+                    Some(source.to_string()),
+                    format!("Snippets can not contain @version"),
+                    None,
+                    None,
+                ));
+        }
+        
+        None
+    }
+
+    fn resolve_include(&mut self, depth: u8) -> Result<String, Diagnostic> {
+        if let Some(diag) = self.check_possible_errors(depth) {
+            self.diagnostics.push(diag.clone());
+            return Err(diag);
+        }
+
+        let mut merged_content = String::new();
+
+        if self.has_includes() {
+            let mut included_snippets = &self.included_snippets.unwrap();
+            // recursively
+
+            // sort them
+            included_snippets.sort();
+
+            // get list of included files
+            // resolve them
+            for snippet in included_snippets {
+                let res = snippet.resolve_include(depth+1);
+                match res {
+                    Ok(sub_snippet_merged_content) => {
+                        merged_content.push_str(&sub_snippet_merged_content);
+                    }
+                    Err(sub_snippet_diag) => {
+                        // report diag to includer
+                        return Err(Diagnostic::new(
+                            snippet.include_range,
+                            Some(DiagnosticSeverity::ERROR),
+                            None,
+                            None,
+                            format!("Included file {:#?} has errors in it", snippet.get_snippet_uri()),
+                            None,
+                            None
+                        ));
+                    }
+                }
+            }
+        }
+
+
+        // resolve self
+        self.resolved_content = merged_content;
+        try_parse_snippet(&self.resolved_content);
+
+        Ok(())
+
 
     }
 
@@ -105,7 +145,74 @@ impl Snippet {
         return self.content.contains("@include");
     }
 
+    pub fn get_resolved_merged(&self) -> String {
+
+        let mut merged = String::new();
+
+        if let Some(includes) = self.included_snippets {
+            for snippet in &includes {
+                let res = snippet.get_resolved_merged();
+                merged.push_str(&res);
+            }
+        }
+
+        merged.push_str(&self.content);
+        merged
+
+    }
+
+
+    fn get_whole_content_range(&self) -> lsp_types::Range {
+
+        let num_of_lines = self.content.lines().count();
+
+        lsp_types::Range::new(
+            Position{line: 0, character: 0 },
+            Position{line: num_of_lines as u32 + 1, character: 0}
+        )
+    }
+
+    fn get_range_by_pattern(&self, pattern: &str) -> Option<lsp_types::Range> {
+        let mut starting_line: usize  = 0;
+        
+        for line in self.content.lines() {
+            if line.contains(pattern) {
+                return Some(lsp_types::Range::new(
+                    Position{ line: starting_line as u32, character: 0 },
+                    Position{line: starting_line as u32 + 1, character: 0}));
+            }
+            else {
+                starting_line += 1;
+            }
+        }
+        None
+    }
+
+    /// Get a reference to the snippet's snippet uri.
+    pub fn get_snippet_uri(&self) -> &TextDocumentIdentifier {
+        &self.snippet_uri
+    }
 }
+
+impl Ord for Snippet {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.snippet_uri.uri.cmp(&other.snippet_uri.uri)
+    }
+}
+
+impl PartialOrd for Snippet {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Snippet {
+    fn eq(&self, other: &Self) -> bool {
+        self.snippet_uri == other.snippet_uri
+    }
+}
+
+impl Eq for Snippet {}
 
 
 
@@ -114,12 +221,13 @@ pub struct SyslogNgConfiguration {
     configuration: String,
     // configuration_URI: TextDocumentIdentifier,
     version: VersionAnnotation,
-    snippets: Vec<Snippet>,
+    snippets: HashMap<String, Snippet>,
 
 
     is_valid: bool,
     global_options: Vec<GlobalOption>,
-    objects: Vec<Box< dyn Object + Send + Sync>>,
+    objects: Vec<Box<Object>>,
+    diagnostics: Vec<(String, Diagnostic)>
 }
 
 impl SyslogNgConfiguration {
@@ -131,11 +239,12 @@ impl SyslogNgConfiguration {
                 minor_version: 0
             },
             // configuration_URI: TextDocumentIdentifier::new(Url::parse("syslog-ng.conf").unwrap()),
-            snippets: Vec::new(),
+            snippets: HashMap::new(),
 
             is_valid: false,
             global_options: Vec::new(),
             objects: Vec::new(),
+            diagnostics: Vec::new(),
             
         }
     }
@@ -154,7 +263,7 @@ impl SyslogNgConfiguration {
     }
 
     pub fn add_snippet(&mut self, snippet: Snippet) {
-        self.snippets.push(snippet);
+        self.snippets.insert(snippet.get_snippet_uri().uri.to_string(), snippet);
 
     }
 
@@ -169,11 +278,11 @@ impl AST for SyslogNgConfiguration {
         &self.global_options
     }
 
-    fn get_objects(&self) -> &Vec<Box< dyn Object + Send + Sync>> {
+    fn get_objects(&self) -> &Vec<Box<Object>> {
         &self.objects
     }
 
-    fn get_objects_by_kind(&self, kind: ObjectKind) -> Vec<&Box<dyn Object + Send + Sync>> {
+    fn get_objects_by_kind(&self, kind: &ObjectKind) -> Vec<&Box<Object>> {
         self.objects
         .iter()
         .filter(
@@ -190,10 +299,12 @@ pub trait ParsedConfiguration: AST {
     fn get_code_completion(&self, params: &CompletionParams) -> Option<CompletionResponse>;
     fn get_context(&self, params: &CompletionParams) -> Context;
 
-    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> bool;
+    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> Option<&str>;
 
 
     fn apply_diff(&mut self, content_changes: DidChangeTextDocumentParams);
+
+    fn add_diagnostics(&mut self, diag: Diagnostic);
 
 
 
@@ -244,8 +355,8 @@ impl ParsedConfiguration for SyslogNgConfiguration {
 
         let mut response = Vec::new();
 
-        for kv in results {
-            let item = SyslogNgConfiguration::transform_grammar_option_to_completion_response(&kv);
+        for (label, details) in results {
+            let item = SyslogNgConfiguration::transform_grammar_option_to_completion_response(&label, &details);
             response.push(item);
         }
 
@@ -268,7 +379,7 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         let text_document_position = &params.text_document_position;
 
         for obj in self.get_objects() {
-            if obj.contains_document_position(text_document_position) {
+            if obj.is_inside_document_position(text_document_position) {
                 return Context::from(obj.get_kind());
             }
         }
@@ -277,11 +388,18 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         Context::Root
     }
 
-    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> bool {
+    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> Option<&str> {
 
-        if 
 
-        false
+        None
+    }
+
+    fn add_diagnostics(&mut self, diag: Diagnostic) {
+
+
+
+        
+
     }
     
 }

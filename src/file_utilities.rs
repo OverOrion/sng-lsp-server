@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, fs::read_to_string};
+use std::{path::{Path, PathBuf}, fs::{read_to_string, self}, io::{Error, ErrorKind, self, BufRead}, str::FromStr};
 
 use glob::{glob, GlobError};
 
@@ -33,4 +33,45 @@ pub fn get_files_from_wildcard(wildcard: &str, path: &str) -> Result<Vec<PathBuf
 
 pub fn get_contents(path: PathBuf) -> std::io::Result<String> {
     Ok(read_to_string(path)?)
+}
+
+pub fn get_files_from_directory(dir: &str) -> std::io::Result<Vec<PathBuf>> {
+    match fs::read_dir(dir)?
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, std::io::Error>>() {
+        Ok(it) => Ok(it),
+        Err(err) => return Err(err),
+    }   
+}
+
+pub fn get_main_config_file(current_dir: &str) -> std::io::Result<PathBuf> {
+    let files = get_files_from_directory(current_dir)?;
+
+    for file in files {
+        if let Some(main_config_file) = get_contents(file)?.contains("@version").then(|| file) {
+            return Ok(main_config_file);
+        }
+    }
+    Err(Error::new(ErrorKind::NotFound, "Could not find file with @version, make sure one (and only one) contains it"))
+}
+
+pub fn get_driver_by_position(uri: &str, line_num: u32) -> Option<String> {
+    let contents = get_contents(PathBuf::from_str(uri).unwrap());
+    let mut buf = vec![];
+
+    if let Ok(contents) = contents {
+        let line = contents.lines().nth(line_num.try_into().unwrap()).unwrap();
+        let mut cursor = io::Cursor::new(line);
+
+        cursor.read_until(b'(', &mut buf).expect("Reading from cursor won't fail");
+    }
+
+    if let Ok(driver_name) = std::str::from_utf8(&buf).to_owned() {
+        let driver_name = &mut driver_name.to_string();
+        if  driver_name.pop() == Some('(') {
+            return Some(driver_name.to_owned());
+        }
+    }
+
+    None
 }

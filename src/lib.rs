@@ -8,9 +8,9 @@ mod file_utilities;
 use std::sync::{Arc, RwLock};
 
 use ast::SyslogNgConfiguration;
-use grammar::{grammar_init, grammar_get_all_options};
+use grammar::{grammar_init};
 use serde_json::Value;
-use tower_lsp::jsonrpc::{Result, Error};
+use tower_lsp::jsonrpc::{Result};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
@@ -39,15 +39,10 @@ impl Backend {
 
     fn process_config(&self) {}
 
-    fn get_context(&self, text_position: &TextDocumentPositionParams) {
-
-
-    }
-
     
     
     pub fn get_possible_completion(&self, params: &CompletionParams) -> Option<CompletionResponse> {
-        
+todo!()
 
     }
 
@@ -58,21 +53,21 @@ impl Backend {
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
-            server_info: None,
+            server_info: Some(ServerInfo{
+                name: "syslog-ng LSP server".to_string(),
+                version: Some("0.1".to_string()),
+            }),
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::INCREMENTAL,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string()]),
+                    trigger_characters: None,
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                 }),
-                execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["dummy.do_something".to_string()],
-                    work_done_progress_options: Default::default(),
-                }),
+                execute_command_provider: None,
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
                         supported: Some(true),

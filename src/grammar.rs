@@ -87,31 +87,26 @@ pub fn grammar_get_all_options(object_type: &str, name: &str) -> Option<HashMap<
     for kv_arr in object_options_array {
         let mut current_option = kv_arr.as_array()?.get(0)?.as_str()?;
 
-        // option_name1/deprecated_name2/depracated_name3/...
+        // option_name1/option_name2/option_name3/...
         if current_option.contains("/") {
             let split = current_option.split("/");
             let vec: Vec<&str> = split.collect();
 
             current_option = vec[0];
-        } else {
-        }
+        } else {}
 
         let current_option = current_option;
         let option_type = kv_arr.as_array()?.get(1)?.as_array()?.get(0);
 
-        match option_type {
-            None => {
-                break;
-            }
-            Some(value) => {
-                let option_type = value.as_str()?;
+        if let Some(value) = option_type {
+            let option_type = value.as_str()?;
 
                 result.insert(
                     // option, (<option_type>)
-                    remove_surronding_quotes(current_option),
+                    remove_surronding_quotes(current_option).to_string(),
                     format!("({})", remove_surronding_quotes(option_type)).to_string(),
                 );
-            }
+
         }
     }
 
