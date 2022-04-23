@@ -44,15 +44,29 @@ pub fn get_files_from_directory(dir: &str) -> std::io::Result<Vec<PathBuf>> {
     }   
 }
 
+fn find_version_annotation(input: &str) -> Option<usize> {
+    let mut version_line: usize = 0;
+
+    for line in input.lines() {
+        if let Some(0) = line.find("@version") {
+            return Some(0);
+        }
+        version_line += 1;
+    }
+    None
+}
+
 pub fn get_main_config_file(current_dir: &str) -> std::io::Result<PathBuf> {
     let files = get_files_from_directory(current_dir)?;
 
-    for file in files {
-        if let Some(main_config_file) = get_contents(file)?.contains("@version").then(|| file) {
-            return Ok(main_config_file);
+    for file in files.iter() {
+        let main_conf_file = file;
+        let contents =  get_contents(file.to_path_buf())?;
+        if let Some(_) = find_version_annotation(&contents) {
+            return Ok(main_conf_file.to_path_buf());
         }
     }
-    Err(Error::new(ErrorKind::NotFound, "Could not find file with @version, make sure one (and only one) contains it"))
+    Err(Error::new(ErrorKind::NotFound, "Could not find file with @version, make sure one (and only one) file contains it"))
 }
 
 pub fn get_driver_by_position(uri: &str, line_num: u32) -> Option<String> {

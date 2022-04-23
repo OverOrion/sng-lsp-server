@@ -108,7 +108,7 @@ pub mod objects {
             &self,
             text_document_position: &TextDocumentPositionParams,
         ) -> bool {
-            let (self_uri, self_range) = &self.location.unwrap();
+            let (self_uri, self_range) = &self.location.as_ref().unwrap();
 
             let self_start_pos = self_range.start;
             let self_end_pos = self_range.end;

@@ -4,7 +4,7 @@ use std::{cmp::Ordering, convert::From, sync::{RwLock, Arc}, collections::HashMa
 
 use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, CompletionItem, self, DiagnosticSeverity};
 
-use crate::{language_types::{objects::{Object, ObjectKind}, GlobalOption, annotations::VersionAnnotation}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::try_parse_snippet};
+use crate::{language_types::{objects::{Object, ObjectKind}, GlobalOption, annotations::VersionAnnotation}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}};
 
 
 
@@ -55,7 +55,7 @@ pub struct Snippet {
 
     pub included_snippets: Option<Vec<Snippet>>,
     pub resolved_content: String,
-    pub depth: u8
+    pub depth: u8,
 }
 
 impl Snippet {
@@ -101,7 +101,7 @@ impl Snippet {
         let mut merged_content = String::new();
 
         if self.has_includes() {
-            let mut included_snippets = &self.included_snippets.unwrap();
+            let included_snippets :&mut Vec<Snippet> = self.included_snippets.as_mut().unwrap();
             // recursively
 
             // sort them
@@ -109,7 +109,7 @@ impl Snippet {
 
             // get list of included files
             // resolve them
-            for snippet in included_snippets {
+            for snippet in included_snippets.iter_mut() {
                 let res = snippet.resolve_include(depth+1);
                 match res {
                     Ok(sub_snippet_merged_content) => {
@@ -134,9 +134,9 @@ impl Snippet {
 
         // resolve self
         self.resolved_content = merged_content;
-        try_parse_snippet(&self.resolved_content);
-
-        Ok(())
+        // try_parse_snippet(&self.resolved_content);
+todo!();
+        // Ok(())
 
 
     }
@@ -149,8 +149,8 @@ impl Snippet {
 
         let mut merged = String::new();
 
-        if let Some(includes) = self.included_snippets {
-            for snippet in &includes {
+        if let Some(includes) = &self.included_snippets {
+            for snippet in includes {
                 let res = snippet.get_resolved_merged();
                 merged.push_str(&res);
             }

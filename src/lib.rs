@@ -51,7 +51,10 @@ todo!()
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, ip: InitializeParams) -> Result<InitializeResult> {
+        self.client
+            .log_message(MessageType::INFO, format!("initialized: {:?}", ip.workspace_folders).to_owned())
+            .await;
         Ok(InitializeResult {
             server_info: Some(ServerInfo{
                 name: "syslog-ng LSP server".to_string(),

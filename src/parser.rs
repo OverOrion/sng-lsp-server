@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_while},
     character::{complete::{alphanumeric1, digit1, multispace0, not_line_ending}},
-    combinator::{value, opt},
+    combinator::{value, opt, peek},
     error::{Error, ErrorKind, ParseError},
     multi::{separated_list1, many1},
     number::complete::double,
@@ -285,6 +285,10 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
 }
 
 
+fn convert_index_to_human_readable(idx: usize) -> usize {
+    idx+1
+}
+
 // pub fn try_parse_snippet(input: &str) -> IResult<&str, bool> {
 //     let (input, ) = alt(
 
@@ -294,11 +298,38 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
 // }
 
 pub fn try_parse_configuration(input: &str) -> IResult<&str, Option<Box<dyn ParsedConfiguration>>> {
+    todo!();
 
-    while input.len() > 0 {
+    // let mut line_num: usize = 0;
+
+    // let mut char = peek(alpha1)(input);
+
+    // // get snippet list
+
+    // // parse snippets
+
+    // // parse self
+
+    // // peek for # => comments
+
+    // //@include
+
+    // //@version - must be here
+    // //
+
+
+    // while input.len() > 0 {
+    //     // parse comments
+    //     if Ok((input, _)) = 
+
+
         
-    }
-    Ok(())
+    // }
+    
+   
 
+
+
+    // return error if input != eof
 
 }
