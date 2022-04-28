@@ -1,19 +1,17 @@
+pub mod ast;
+mod file_utilities;
+pub mod grammar;
 pub mod language_types;
 pub mod parser;
-pub mod ast;
-pub mod grammar;
-mod file_utilities;
-
 
 use std::sync::{Arc, RwLock};
 
 use ast::SyslogNgConfiguration;
-use grammar::{grammar_init};
+use grammar::grammar_init;
 use serde_json::Value;
-use tower_lsp::jsonrpc::{Result};
+use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
-
 
 pub enum ServerErrorCodes {
     CompletionError = 0,
@@ -21,42 +19,52 @@ pub enum ServerErrorCodes {
 
 pub struct Backend {
     pub client: Client,
-    pub configuration: &'static Arc<RwLock<SyslogNgConfiguration>>
+    pub configuration: &'static Arc<RwLock<SyslogNgConfiguration>>,
 }
 
 impl Backend {
+    // fn init_configuraton(&self, configuration: &str, URI: &TextDocumentIdentifier) {
+    //     let config_lock = &self.configuration.clone();
 
-    fn init_configuraton(&self, configuration: &str, URI: &TextDocumentIdentifier) {
-        let config_lock = &self.configuration.clone();
-
-        if let Ok(mut write_guard) = config_lock.write() {
-            let mut assembled_config = &mut *write_guard;
-            &assembled_config.add_configuration(&configuration, &URI);
-        };
-    }
+    //     if let Ok(mut write_guard) = config_lock.write() {
+    //         let mut assembled_config = &mut *write_guard;
+    //         &assembled_config.add_configuration(&configuration, &URI);
+    //     };
+    // }
 
     fn update_configuration(&self) {}
 
     fn process_config(&self) {}
 
-    
-    
-    pub fn get_possible_completion(&self, params: &CompletionParams) -> Option<CompletionResponse> {
-todo!()
+    pub fn set_workspace_folder(&self, url: &Url) {
+        let config_lock = &self.configuration.clone();
 
+        if let Ok(mut write_guard) = config_lock.write() {
+            let mut conf = &mut *write_guard;
+            conf.set_workspace_folder(url)
+        };
     }
 
-    
+    pub fn get_possible_completion(&self, params: &CompletionParams) -> Option<CompletionResponse> {
+        todo!()
+    }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, ip: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, initialize_params: InitializeParams) -> Result<InitializeResult> {
         self.client
-            .log_message(MessageType::INFO, format!("initialized: {:?}", ip.workspace_folders).to_owned())
+            .log_message(
+                MessageType::INFO,
+                format!("initialized: {:?}", initialize_params.root_uri).to_owned(),
+            )
             .await;
+        if let Some(workspace_folder) = &initialize_params.root_uri {
+            self.set_workspace_folder(&workspace_folder);
+        }
+        grammar_init();
         Ok(InitializeResult {
-            server_info: Some(ServerInfo{
+            server_info: Some(ServerInfo {
                 name: "syslog-ng LSP server".to_string(),
                 version: Some("0.1".to_string()),
             }),
@@ -126,13 +134,16 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, doc: DidOpenTextDocumentParams) {
+        //TODO build AST
+
+        // find main
+
+        // 
         let content = &doc.text_document.text;
         self.client
             .log_message(MessageType::INFO, "file opened: ".to_owned() + &content)
             .await;
     }
-
-
 
     async fn did_change(&self, _: DidChangeTextDocumentParams) {
         self.client
@@ -153,23 +164,14 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        self.client.log_message(MessageType::INFO, format!("{:?}", params));
-        // Ok(Some(CompletionResponse::Array(vec![
-           // CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
-            // CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
-        // ])))
-        grammar_init();
+        self.client
+            .log_message(MessageType::INFO, format!("{:?}", params));
         let res = Backend::get_possible_completion(&self, &params);
 
         match res {
+            Some(val) => Ok(Some(val)),
 
-            Some(val) => {
-                Ok(Some(val))
-            },
-
-            None => Ok(None)
-
-            // _ => Err(Error::new(tower_lsp::jsonrpc::ErrorCode::ServerError(ServerErrorCodes::CompletionError as i64)))
+            None => Ok(None), // _ => Err(Error::new(tower_lsp::jsonrpc::ErrorCode::ServerError(ServerErrorCodes::CompletionError as i64)))
         }
     }
 }

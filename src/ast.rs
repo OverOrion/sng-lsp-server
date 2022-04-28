@@ -2,9 +2,9 @@
 use std::{cmp::Ordering, convert::From, sync::{RwLock, Arc}, collections::HashMap};
 
 
-use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, CompletionItem, self, DiagnosticSeverity};
+use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, CompletionItem, self, DiagnosticSeverity, Url};
 
-use crate::{language_types::{objects::{Object, ObjectKind}, GlobalOption, annotations::VersionAnnotation}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}};
+use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, annotations::{VersionAnnotation, IncludeAnnotation}}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::Annotation};
 
 
 
@@ -39,9 +39,9 @@ impl From<&ObjectKind> for Context {
 
 pub trait AST{
     fn get_global_options(&self) -> &Vec<GlobalOption>;
-    fn get_objects(&self) -> &Vec<Box<Object>>;
+    fn get_objects(&self) -> &Vec<Object>;
 
-    fn get_objects_by_kind(&self, kind: &ObjectKind) -> Vec<&Box<Object>>;
+    fn get_objects_by_kind(&self, kind: &ObjectKind) -> Vec<&Object>;
 }
 
 
@@ -221,12 +221,14 @@ pub struct SyslogNgConfiguration {
     configuration: String,
     // configuration_URI: TextDocumentIdentifier,
     version: VersionAnnotation,
+
+    includes: Vec<IncludeAnnotation>,
     snippets: HashMap<String, Snippet>,
 
-
+    workspace_folder: Option<Url>,
     is_valid: bool,
     global_options: Vec<GlobalOption>,
-    objects: Vec<Box<Object>>,
+    objects: Vec<Object>,
     diagnostics: Vec<(String, Diagnostic)>
 }
 
@@ -239,7 +241,10 @@ impl SyslogNgConfiguration {
                 minor_version: 0
             },
             // configuration_URI: TextDocumentIdentifier::new(Url::parse("syslog-ng.conf").unwrap()),
+            includes: Vec::new(),
             snippets: HashMap::new(),
+
+            workspace_folder: None,
 
             is_valid: false,
             global_options: Vec::new(),
@@ -251,7 +256,6 @@ impl SyslogNgConfiguration {
 
     pub fn new() -> Arc<RwLock<SyslogNgConfiguration>> {
         Arc::new(RwLock::new(SyslogNgConfiguration::init_new()))
-
     }
 
     pub fn add_configuration(&mut self, conf: &str, URI: &TextDocumentIdentifier) {
@@ -267,9 +271,28 @@ impl SyslogNgConfiguration {
 
     }
 
+    pub fn add_annotation(&mut self, annotation: Annotation) {
+        match annotation {
+            Annotation::VA(version) => self.version = version,
+            Annotation::IA(include) => {
+                if let Some(include) = include {
+                    self.includes.push(include)
+                }
+            },
+        }
+    }
+
+    pub fn add_object(&mut self, obj:Object) {
+        self.objects.push(obj);
+    }
+
     pub fn transform_grammar_option_to_completion_response(label: &str, details: &str) -> CompletionItem {
         // inp := option_name(<option_type>)
         CompletionItem::new_simple(label.to_string(), details.to_owned())
+    }
+
+    pub fn set_workspace_folder(&mut self, url: &Url) {
+        self.workspace_folder = Some(url.to_owned())
     }
 }
 
@@ -278,11 +301,11 @@ impl AST for SyslogNgConfiguration {
         &self.global_options
     }
 
-    fn get_objects(&self) -> &Vec<Box<Object>> {
+    fn get_objects(&self) -> &Vec<Object> {
         &self.objects
     }
 
-    fn get_objects_by_kind(&self, kind: &ObjectKind) -> Vec<&Box<Object>> {
+    fn get_objects_by_kind(&self, kind: &ObjectKind) -> Vec<&objects::Object>{
         self.objects
         .iter()
         .filter(

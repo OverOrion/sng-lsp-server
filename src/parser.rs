@@ -1,9 +1,7 @@
-use core::panic;
-
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_while},
-    character::{complete::{alphanumeric1, digit1, multispace0, not_line_ending}},
+    character::{complete::{alphanumeric1, digit1, multispace0, not_line_ending, alpha1}},
     combinator::{value, opt, peek},
     error::{Error, ErrorKind, ParseError},
     multi::{separated_list1, many1},
@@ -13,7 +11,27 @@ use nom::{
 };
 
 
-use crate::{language_types::{objects::{Parameter, ObjectKind, Object}, annotations::*}, ast::ParsedConfiguration};
+use crate::{language_types::{objects::{Parameter, ObjectKind, Object}, annotations::*}, ast::{ParsedConfiguration, SyslogNgConfiguration}};
+
+
+enum SngSyntaxErrorKind {
+    UnknownObjectType(String),
+    MissingIdentifier,
+    MissingBraces,
+    UnknownOption(String),
+    MissingParentheses,
+    MissingSemiColon,
+
+    InvalidType
+}
+
+struct SngSyntaxError {
+    message: String,
+    file_url: String,
+    line_num: u32,
+    column_num: u32,
+}
+
 
 pub enum Annotation {
     VA(VersionAnnotation),
@@ -35,10 +53,11 @@ pub enum ValueTypes {
 fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
     let (input, _) = tag("@")(input)?;
 
-    let (input, annotation) = take_while(|c: char| c.is_alphabetic())(input)?;
+    let (input, annotation) = alpha1(input)?;
 
     match annotation {
         "version" => {
+            let (input, _) = ws(tag(":"))(input)?;
             let (input, (major_version, minor_version)) = version_parser(input)?;
             Ok((
                 input,
@@ -58,7 +77,6 @@ fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
         _ => {
             let (inp, _) = not_line_ending(input)?;
             Ok((inp, None))
-
         }
     }
 }
@@ -68,18 +86,19 @@ fn version_parser(input: &str) -> IResult<&str, (u8, u8)> {
     let line_ending = tag("\n");
 
     let (input, (major_version, _, minor_version, _)) =
-        tuple((version, tag("."), version, line_ending))(input)?;
+        tuple((version, tag("."), version, ws(line_ending)))(input)?;
 
     let major_version = major_version.parse::<u8>();
     let major_version = match major_version {
         Ok(major_version) => major_version,
-        Err(e) => panic!("Not an integer"),
+        Err(e) => return Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
     };
 
     let minor_version = minor_version.parse::<u8>();
     let minor_version = match minor_version {
         Ok(minor_version) => minor_version,
-        Err(e) => panic!("Not an integer"),
+        Err(e) => return Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
+
     };
 
     Ok((input, (major_version, minor_version)))
@@ -289,7 +308,69 @@ fn convert_index_to_human_readable(idx: usize) -> usize {
     idx+1
 }
 
+fn read_chunk(input: &str, ) {
+
+}
+
+fn parse_conf(input: &str, file_url: &str, sng_conf: &mut SyslogNgConfiguration ) -> Option<SngSyntaxErrorKind> {
+    let mut line_num: u32 = 0;
+
+    let lines = input.lines(); // line: 0
+
+    let mut chunk = String::new();
+
+    while let Some(current_line) = lines.next() {
+
+        chunk.push_str(current_line);
+        
+        // comment
+        let mut parser: Result<(&str, char), nom::Err<_>> = peek(nom::character::complete::char('#'));
+        if let Ok((_, _)) = parser(chunk.as_str()) {
+            comment_parser(&chunk);
+        }
+
+        // annotation
+        if let Ok((_, _)) = peek(tag("@"))(&*chunk) {
+            let res = annotation_parser(&chunk);
+            match res {
+                Ok((inp, res)) => {
+                    if let Some(annotation) = res {
+                        sng_conf.add_annotation(annotation);
+                        chunk.push_str(inp);
+                    }
+                },
+                Err(e) => return Some(SngSyntaxErrorKind::InvalidType),
+            }
+        }
+
+        // object
+        if let Ok((_, _)) = peek(parse_object_block)(&chunk) {
+            let res = parse_object_block(&chunk);
+            match res {
+                Ok((inp, obj)) => {
+                    sng_conf.add_object(obj);
+                    chunk.push_str(inp);
+                },
+                Err(e) => return Some(SngSyntaxErrorKind::UnknownObjectType("foobar".to_string())),
+            }
+        }
+
+        lines.next();
+        line_num += 1;
+
+    }
+
+    if chunk.len() > 0 {
+        return Some(SngSyntaxErrorKind::UnknownOption("barfoo".to_string()));
+
+    }
+
+    None
+}
+
 // pub fn try_parse_snippet(input: &str) -> IResult<&str, bool> {
+    // let mut line_num: usize = 0;
+
 //     let (input, ) = alt(
 
 //     )(input)?;

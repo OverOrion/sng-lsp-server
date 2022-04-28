@@ -45,13 +45,10 @@ pub fn get_files_from_directory(dir: &str) -> std::io::Result<Vec<PathBuf>> {
 }
 
 fn find_version_annotation(input: &str) -> Option<usize> {
-    let mut version_line: usize = 0;
-
     for line in input.lines() {
         if let Some(0) = line.find("@version") {
             return Some(0);
         }
-        version_line += 1;
     }
     None
 }
