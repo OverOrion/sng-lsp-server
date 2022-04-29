@@ -4,7 +4,7 @@ use std::{cmp::Ordering, convert::From, sync::{RwLock, Arc}, collections::HashMa
 
 use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, CompletionItem, self, DiagnosticSeverity, Url};
 
-use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, annotations::{VersionAnnotation, IncludeAnnotation}}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::Annotation};
+use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, annotations::{VersionAnnotation, IncludeAnnotation}}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::{Annotation, try_parse_configuration}};
 
 
 
@@ -258,11 +258,16 @@ impl SyslogNgConfiguration {
         Arc::new(RwLock::new(SyslogNgConfiguration::init_new()))
     }
 
-    pub fn add_configuration(&mut self, conf: &str, URI: &TextDocumentIdentifier) {
+    // pub fn add_configuration(&mut self, conf: &str, URI: &TextDocumentIdentifier) {
+    pub fn add_configuration(&mut self, conf: &str) {
         // if has @version => main config
         if conf.contains("@version") {
             self.configuration.push_str(conf);
             // self.configuration_URI = URI.clone();
+
+            let conf_ro = &self.configuration.clone();
+
+            try_parse_configuration(conf_ro, self)
         }
     }
 

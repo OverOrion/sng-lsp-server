@@ -1,18 +1,22 @@
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_while},
-    character::{complete::{alphanumeric1, digit1, multispace0, not_line_ending, alpha1}},
-    combinator::{value, opt, peek},
+    character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
+    combinator::{opt, peek, value},
     error::{Error, ErrorKind, ParseError},
-    multi::{separated_list1, many1},
+    multi::{many1, separated_list1},
     number::complete::double,
     sequence::{delimited, tuple},
     IResult,
 };
 
-
-use crate::{language_types::{objects::{Parameter, ObjectKind, Object}, annotations::*}, ast::{ParsedConfiguration, SyslogNgConfiguration}};
-
+use crate::{
+    ast::{ParsedConfiguration, SyslogNgConfiguration},
+    language_types::{
+        annotations::*,
+        objects::{Object, ObjectKind, Parameter},
+    },
+};
 
 enum SngSyntaxErrorKind {
     UnknownObjectType(String),
@@ -22,7 +26,7 @@ enum SngSyntaxErrorKind {
     MissingParentheses,
     MissingSemiColon,
 
-    InvalidType
+    InvalidType,
 }
 
 struct SngSyntaxError {
@@ -31,7 +35,6 @@ struct SngSyntaxError {
     line_num: u32,
     column_num: u32,
 }
-
 
 pub enum Annotation {
     VA(VersionAnnotation),
@@ -71,7 +74,7 @@ fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
             let (input, include) = include_parser(input)?;
             match include {
                 Some(include) => Ok((input, Some(Annotation::IA(Some(include))))),
-                None => Ok((input, Some(Annotation::IA(None))))
+                None => Ok((input, Some(Annotation::IA(None)))),
             }
         }
         _ => {
@@ -98,7 +101,6 @@ fn version_parser(input: &str) -> IResult<&str, (u8, u8)> {
     let minor_version = match minor_version {
         Ok(minor_version) => minor_version,
         Err(e) => return Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
-
     };
 
     Ok((input, (major_version, minor_version)))
@@ -139,17 +141,20 @@ where
 
 fn parse_value_yesno(input: &str) -> IResult<&str, ValueTypes> {
     let (input, yesno) = alt((
-        tag("1"), tag("0"),
-        tag("yes"), tag("no"),
-        tag("on"), tag("off"),
+        tag("1"),
+        tag("0"),
+        tag("yes"),
+        tag("no"),
+        tag("on"),
+        tag("off"),
         digit1,
     ))(input)?;
 
     let val = yesno;
 
     match val {
-        "1" | "yes" | "on"  => Ok((input, ValueTypes::YesNo(true))),
-        "0" | "no"  | "off" => Ok((input, ValueTypes::YesNo(false))),
+        "1" | "yes" | "on" => Ok((input, ValueTypes::YesNo(true))),
+        "0" | "no" | "off" => Ok((input, ValueTypes::YesNo(false))),
 
         _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Alt))),
     }
@@ -239,16 +244,16 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
     }
 }
 
-fn match_object_kind(input:&str) -> Option<ObjectKind> {
+fn match_object_kind(input: &str) -> Option<ObjectKind> {
     match input {
         "source" => Some(ObjectKind::Source),
-        "destination" =>  Some(ObjectKind::Destination),
-        "log" =>  Some(ObjectKind::Log),
-        "filter" =>  Some(ObjectKind::Filter),
-        "parser" =>  Some(ObjectKind::Parser),
-        "rewrite" =>  Some(ObjectKind::RewriteRule),
-        "template" =>  Some(ObjectKind::Template),
-        _ =>  None
+        "destination" => Some(ObjectKind::Destination),
+        "log" => Some(ObjectKind::Log),
+        "filter" => Some(ObjectKind::Filter),
+        "parser" => Some(ObjectKind::Parser),
+        "rewrite" => Some(ObjectKind::RewriteRule),
+        "template" => Some(ObjectKind::Template),
+        _ => None,
     }
 }
 
@@ -278,108 +283,118 @@ fn parse_object_option(input: &str) -> IResult<&str, Option<Parameter>> {
     let (input, option_value) = delimited(tag("("), opt(parse_value), tag(")"))(input)?;
 
     match option_value {
-        Some(option_value) =>     Ok((input, Some(Parameter::new(option_name.to_owned(), option_value)))),
+        Some(option_value) => Ok((
+            input,
+            Some(Parameter::new(option_name.to_owned(), option_value)),
+        )),
         None => Ok((input, None)),
-    }}
+    }
+}
 
 fn parse_object_block(input: &str) -> IResult<&str, Object> {
     //TODO add anon block
-   //  <object_type> <id> {
-       
-   // };
 
-   let (input, kind) = ws(parse_object_kind)(input)?;
+    //  <object_type> <id> {
 
-   let (input, id) = ws(take_while(|c| c != '{'))(input)?;
+    // };
 
-   let (input, options) = delimited(ws(tag("{")), many1(parse_object_option), ws(tag("};")))(input)?;
+    let (mut input, kind) = ws(parse_object_kind)(input)?;
 
-   let options = options
-    .into_iter()
-    .filter(|option|option.is_some())
-    .map(|option| option.unwrap())
-    .collect();
+    let mut id = "";
 
-    Ok((input, Object::new_without_location(id.to_string(), kind, options)))
+    match kind {
+        ObjectKind::Log => (),
+        _ => {
+            (input, id) = ws(take_while(|c| c != '{'))(input)?;
+        },
+    }
+
+    let (input, options) =
+        delimited(ws(tag("{")), many1(parse_object_option), ws(tag("};")))(input)?;
+
+    let options = options
+        .into_iter()
+        .filter(|option| option.is_some())
+        .map(|option| option.unwrap())
+        .collect();
+
+    Ok((
+        input,
+        Object::new_without_location(id.to_string(), kind, options),
+    ))
 }
-
 
 fn convert_index_to_human_readable(idx: usize) -> usize {
-    idx+1
+    idx + 1
 }
 
-fn read_chunk(input: &str, ) {
-
-}
-
-fn parse_conf(input: &str, file_url: &str, sng_conf: &mut SyslogNgConfiguration ) -> Option<SngSyntaxErrorKind> {
+fn parse_conf(
+    input: &str,
+    file_url: &str,
+    sng_conf: &mut SyslogNgConfiguration,
+) -> Option<SngSyntaxErrorKind> {
     let mut line_num: u32 = 0;
 
-    let lines = input.lines(); // line: 0
+    let mut lines = input.lines(); // line: 0
 
     let mut chunk = String::new();
 
     while let Some(current_line) = lines.next() {
-
         chunk.push_str(current_line);
-        
+
         // comment
-        let mut parser: Result<(&str, char), nom::Err<_>> = peek(nom::character::complete::char('#'));
-        if let Ok((_, _)) = parser(chunk.as_str()) {
+        if let Some(0) = chunk.find("#") {
             comment_parser(&chunk);
         }
 
         // annotation
-        if let Ok((_, _)) = peek(tag("@"))(&*chunk) {
-            let res = annotation_parser(&chunk);
+        if let Some(0) = chunk.find("@") {
+            let chunk_ro = chunk.clone();
+            let res = annotation_parser(&chunk_ro);
             match res {
                 Ok((inp, res)) => {
                     if let Some(annotation) = res {
                         sng_conf.add_annotation(annotation);
                         chunk.push_str(inp);
                     }
-                },
+                }
                 Err(e) => return Some(SngSyntaxErrorKind::InvalidType),
             }
         }
 
         // object
-        if let Ok((_, _)) = peek(parse_object_block)(&chunk) {
-            let res = parse_object_block(&chunk);
+        let chunk_ro = chunk.clone();
+        if let Ok((_, _)) = peek(parse_object_block)(&chunk_ro) {
+            let res = parse_object_block(&chunk_ro);
             match res {
                 Ok((inp, obj)) => {
                     sng_conf.add_object(obj);
                     chunk.push_str(inp);
-                },
+                }
                 Err(e) => return Some(SngSyntaxErrorKind::UnknownObjectType("foobar".to_string())),
             }
         }
 
         lines.next();
         line_num += 1;
-
     }
 
     if chunk.len() > 0 {
         return Some(SngSyntaxErrorKind::UnknownOption("barfoo".to_string()));
-
     }
 
     None
 }
 
 // pub fn try_parse_snippet(input: &str) -> IResult<&str, bool> {
-    // let mut line_num: usize = 0;
-
-//     let (input, ) = alt(
-
-//     )(input)?;
-
+//     parse_conf(input, )
 
 // }
 
-pub fn try_parse_configuration(input: &str) -> IResult<&str, Option<Box<dyn ParsedConfiguration>>> {
-    todo!();
+pub fn try_parse_configuration(input: &str, conf: &mut SyslogNgConfiguration) -> () {
+
+
+
 
     // let mut line_num: usize = 0;
 
@@ -398,19 +413,11 @@ pub fn try_parse_configuration(input: &str) -> IResult<&str, Option<Box<dyn Pars
     // //@version - must be here
     // //
 
-
     // while input.len() > 0 {
     //     // parse comments
-    //     if Ok((input, _)) = 
+    //     if Ok((input, _)) =
 
-
-        
     // }
-    
-   
-
-
 
     // return error if input != eof
-
 }

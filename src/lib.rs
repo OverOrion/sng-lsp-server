@@ -34,7 +34,15 @@ impl Backend {
 
     fn update_configuration(&self) {}
 
-    fn process_config(&self) {}
+    fn process_config(&self, content: &str) {
+        let config_lock = &self.configuration.clone();
+
+        if let Ok(mut write_guard) = config_lock.write() {
+            let mut conf = &mut *write_guard;
+            conf.add_configuration(content);
+        };
+
+    }
 
     pub fn set_workspace_folder(&self, url: &Url) {
         let config_lock = &self.configuration.clone();
@@ -138,8 +146,13 @@ impl LanguageServer for Backend {
 
         // find main
 
-        // 
+
         let content = &doc.text_document.text;
+        self.process_config(&content);
+
+
+        // 
+       
         self.client
             .log_message(MessageType::INFO, "file opened: ".to_owned() + &content)
             .await;
