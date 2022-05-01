@@ -6,7 +6,7 @@ pub mod parser;
 
 use std::sync::{Arc, RwLock};
 
-use ast::SyslogNgConfiguration;
+use ast::{SyslogNgConfiguration, ParsedConfiguration};
 use grammar::grammar_init;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
@@ -54,7 +54,14 @@ impl Backend {
     }
 
     pub fn get_possible_completion(&self, params: &CompletionParams) -> Option<CompletionResponse> {
-        todo!()
+        let config_lock = &self.configuration.clone();
+
+        if let Ok(read_guard) = config_lock.read() {
+            let conf: &dyn ParsedConfiguration = &*read_guard;
+            return conf.get_code_completion(params);
+        }
+
+       None 
     }
 }
 

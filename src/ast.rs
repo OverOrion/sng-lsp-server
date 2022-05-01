@@ -4,7 +4,7 @@ use std::{cmp::Ordering, convert::From, sync::{RwLock, Arc}, collections::HashMa
 
 use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, CompletionItem, self, DiagnosticSeverity, Url};
 
-use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, annotations::{VersionAnnotation, IncludeAnnotation}}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::{Annotation, try_parse_configuration}};
+use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, annotations::{VersionAnnotation, IncludeAnnotation}}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::{Annotation, try_parse_configuration}, file_utilities::get_driver_by_position};
 
 
 
@@ -327,7 +327,7 @@ pub trait ParsedConfiguration: AST {
     fn get_code_completion(&self, params: &CompletionParams) -> Option<CompletionResponse>;
     fn get_context(&self, params: &CompletionParams) -> Context;
 
-    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> Option<&str>;
+    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> Option<String>;
 
 
     fn apply_diff(&mut self, content_changes: DidChangeTextDocumentParams);
@@ -353,7 +353,7 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         
 
 
-        let context = ParsedConfiguration::get_context(self, params);
+        let context = self.get_context(params);
 
         match context {
             Context::Root => {
@@ -371,6 +371,7 @@ impl ParsedConfiguration for SyslogNgConfiguration {
             Context::Destination => todo!(),
             Context::Parser => todo!(),
 
+            // Get exsiting object suggestions
             Context::Log => todo!(),
 
             Context::Filter => todo!(),
@@ -416,13 +417,21 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         Context::Root
     }
 
-    fn is_inside_concrete_driver(&self, params:&CompletionParams) -> Option<&str> {
+    fn is_inside_concrete_driver(&self, params: &CompletionParams) -> Option<String> {
+
+        let uri = params.text_document_position.text_document.uri.as_str();
+        let line_num = params.text_document_position.position.line;
+
+        if let Some(driver) = get_driver_by_position(uri, line_num) {
+            return Some(driver);
+        }
 
 
         None
     }
 
     fn add_diagnostics(&mut self, diag: Diagnostic) {
+        todo!()
 
 
 
