@@ -54,12 +54,14 @@ pub mod objects {
     pub struct Parameter {
         pub option_name: String,
         pub value_type: ValueTypes,
+        pub inner_blocks: Option<Vec<Parameter>>,
     }
     impl Parameter {
-        pub fn new(option_name: String, value_type: ValueTypes) -> Parameter {
+        pub fn new(option_name: String, value_type: ValueTypes, inner_blocks: Option<Vec<Parameter>>) -> Parameter {
             Parameter {
                 option_name,
                 value_type,
+                inner_blocks,
             }
         }
     }

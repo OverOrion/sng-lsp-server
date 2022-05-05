@@ -3,6 +3,7 @@ use std::{path::{Path, PathBuf}, fs::{read_to_string, self}, io::{Error, ErrorKi
 use glob::{glob, GlobError};
 
 
+
 pub fn create_absolute_path_from_relative(from: &str, relative_path: &str) -> PathBuf {
     let mut path = PathBuf::new();
 
@@ -66,7 +67,7 @@ pub fn get_main_config_file(current_dir: &str) -> std::io::Result<PathBuf> {
     Err(Error::new(ErrorKind::NotFound, "Could not find file with @version, make sure one (and only one) file contains it"))
 }
 
-pub fn get_driver_by_position(uri: &str, line_num: u32) -> Option<String> {
+pub fn get_block_by_position(uri: &str, line_num: u32) -> Option<String> {
     let contents = get_contents(PathBuf::from_str(uri).unwrap());
     let mut buf = vec![];
 
@@ -77,12 +78,37 @@ pub fn get_driver_by_position(uri: &str, line_num: u32) -> Option<String> {
         cursor.read_until(b'(', &mut buf).expect("Reading from cursor won't fail");
     }
 
-    if let Ok(driver_name) = std::str::from_utf8(&buf).to_owned() {
-        let driver_name = &mut driver_name.to_string();
-        if  driver_name.pop() == Some('(') {
-            return Some(driver_name.to_owned());
+    if let Ok(block_name) = std::str::from_utf8(&buf).to_owned() {
+        let block_name = &mut block_name.to_string();
+        if  block_name.pop() == Some('(') {
+            return Some(block_name.to_owned());
         }
     }
+
+    None
+}
+
+pub fn get_driver_before_position(uri:&str, line_num: u32) -> Option<String> {
+    // <object_type> <id> {
+    // <driver> (
+
+        let contents = get_contents(PathBuf::from_str(uri).unwrap()).unwrap().lines();
+        let mut contents_before_pos = String::new();
+        let mut curr_line_num: u32 = 0;
+
+        while curr_line_num < line_num {
+            let curr_line = contents.next()?;
+            curr_line_num += 1;
+
+            contents_before_pos.push_str(&curr_line);
+        }
+
+        // find opening brace
+        // find opening parantheses
+        if let (Some(brace_pos), Some(paren_pos)) = (contents_before_pos.rfind('{'), contents_before_pos.rfind('(')) {
+            let driver_name = contents_before_pos[brace_pos+1..paren_pos].trim().trim_end();
+            return Some(driver_name.to_owned());
+        }
 
     None
 }

@@ -11,7 +11,7 @@ use nom::{
 };
 
 use crate::{
-    ast::{ParsedConfiguration, SyslogNgConfiguration},
+    ast::SyslogNgConfiguration,
     language_types::{
         annotations::*,
         objects::{Object, ObjectKind, Parameter},
@@ -50,6 +50,7 @@ pub enum ValueTypes {
     Path(String),
     String(String),
     StringList(Vec<String>),
+    InnerBlock((String, Option<Vec<ValueTypes>>))
     //TemplateContent(String)
 }
 
@@ -235,6 +236,7 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
             parse_value_string_or_number,
             parse_value_string,
             parse_value_string_list,
+            parse_inner_block,
         )),
         tag(")"),
     )(input);
@@ -242,6 +244,26 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
         Ok((input, val)) => Ok((input, val)),
         _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Fail))),
     }
+}
+fn parse_inner_block(input: &str) -> IResult<&str, ValueTypes> {
+
+    let (input, option_nested_block_name) =  take_while(|c: char| c != '(' && !c.is_whitespace())(input)?;
+
+    
+    let mut option_values:Vec<Parameter> = Vec::new();
+    let (input, option_values) = many1(
+            delimited(
+                tag("("), 
+                    opt(parse_value),
+                tag(")")))(input)?;
+
+    // match option_value {
+    //     Some(Parameter::new(option_name, value_type, inner_blocks))
+
+    // }
+
+
+
 }
 
 fn match_object_kind(input: &str) -> Option<ObjectKind> {
@@ -267,15 +289,6 @@ fn parse_object_kind(input: &str) -> IResult<&str, ObjectKind> {
     Err(nom::Err::Failure(Error::new(input, ErrorKind::Fail)))
 }
 
-// fn parse_object_identifier(input: &str) -> IResult<&str, &str> {
-//   recognize(
-//     pair(
-//       alt((alpha1, tag("_"))),
-//       many0_count(alt((alphanumeric1, tag("_"))))
-//     )
-//   )(input)
-// }
-
 fn parse_object_option(input: &str) -> IResult<&str, Option<Parameter>> {
     // <option_name>(<arg>?)
     let (input, option_name) = take_while(|c: char| c != '(' && !c.is_whitespace())(input)?;
@@ -285,15 +298,22 @@ fn parse_object_option(input: &str) -> IResult<&str, Option<Parameter>> {
     match option_value {
         Some(option_value) => Ok((
             input,
-            Some(Parameter::new(option_name.to_owned(), option_value)),
+            Some({
+                let option_name = option_name.to_owned();
+                Parameter {
+                    option_name,
+                    value_type: option_value,
+                    inner_blocks,
+                }
+            }),
         )),
         None => Ok((input, None)),
     }
 }
 
-fn parse_object_block(input: &str) -> IResult<&str, Object> {
-    //TODO add anon block
 
+
+fn parse_object_block(input: &str) -> IResult<&str, Object> {
     //  <object_type> <id> {
 
     // };
@@ -302,11 +322,12 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
 
     let mut id = "";
 
-    match kind {
-        ObjectKind::Log => (),
-        _ => {
-            (input, id) = ws(take_while(|c| c != '{'))(input)?;
-        },
+    // optional identifier: anon objects
+
+    let (input, opt_id) = opt(ws(take_while(|c| c != '{')))(input)?;
+
+    if let Some(matched_id) = opt_id {
+        id = matched_id
     }
 
     let (input, options) =

@@ -76,15 +76,19 @@ fn remove_surronding_quotes(inp: &str) -> &str {
     }
 }
 
-pub fn grammar_get_all_options(object_type: &str, name: &str) -> Option<HashMap<String, String>> {
+pub fn grammar_get_all_options(object_type: &str, driver: &str, inner_block: &Option<String>) -> Option<HashMap<String, String>> {
     let options = get_options().as_object()?;
     let object_options = options.get(object_type)?.as_object()?;
-    let object_options = object_options.get(name)?.as_object()?;
+    let object_options = object_options.get(driver)?.as_object()?;
 
-    let object_options_array = object_options.get("options")?.as_array()?;
+    let options_array = 
+    match inner_block {
+        Some(inner_block_name) => object_options.get("blocks")?.as_object()?.get("key")?.as_object()?.get("options")?.as_array()?,
+        None => object_options.get("options")?.as_array()?,
+    };
 
     let mut result = HashMap::new();
-    for kv_arr in object_options_array {
+    for kv_arr in options_array {
         let mut current_option = kv_arr.as_array()?.get(0)?.as_str()?;
 
         // option_name1/option_name2/option_name3/...

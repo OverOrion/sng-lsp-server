@@ -4,7 +4,7 @@ use std::{cmp::Ordering, convert::From, sync::{RwLock, Arc}, collections::HashMa
 
 use tower_lsp::lsp_types::{DidChangeTextDocumentParams, CompletionResponse, Diagnostic, CompletionParams, Position, TextDocumentIdentifier, CompletionItem, self, DiagnosticSeverity, Url};
 
-use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, annotations::{VersionAnnotation, IncludeAnnotation}}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::{Annotation, try_parse_configuration}, file_utilities::get_driver_by_position};
+use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, annotations::{VersionAnnotation, IncludeAnnotation}}, grammar::{grammar_get_all_options, grammar_get_root_level_keywords}, parser::{Annotation, try_parse_configuration}, file_utilities::{get_block_by_position, get_driver_before_position}};
 
 
 
@@ -351,10 +351,8 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         let mut response:Vec<CompletionItem> = Vec::new();
         let mut object_type = String::from("");
         
-
-
+        // let object_in = 
         let context = self.get_context(params);
-
         match context {
             Context::Root => {
                 for kw in grammar_get_root_level_keywords().into_iter() {
@@ -364,12 +362,9 @@ impl ParsedConfiguration for SyslogNgConfiguration {
                 return Some(CompletionResponse::Array(response));
             }
 
-            Context::Source => {    
-
-
-            },
-            Context::Destination => todo!(),
-            Context::Parser => todo!(),
+            Context::Source => object_type.push_str("source"),
+            Context::Destination => object_type.push_str("destination"),
+            Context::Parser => object_type.push_str("parser"),
 
             // Get exsiting object suggestions
             Context::Log => todo!(),
@@ -379,22 +374,22 @@ impl ParsedConfiguration for SyslogNgConfiguration {
             Context::Template => todo!(),
         }
 
-        // from db
-        let results = grammar_get_all_options("destination", "tcp")?;
+        let uri = params.text_document_position.text_document.uri.as_str();
+        let line_num = params.text_document_position.position.line;
 
-        let mut response = Vec::new();
-
-        for (label, details) in results {
-            let item = SyslogNgConfiguration::transform_grammar_option_to_completion_response(&label, &details);
-            response.push(item);
+        let driver = get_driver_before_position(uri, line_num);
+        let inner_block = get_block_by_position(uri, line_num);
+        if let Some(driver) = driver {
+            let mut res:Vec<CompletionItem> 
+            = grammar_get_all_options(&object_type, &driver, &inner_block)?
+            .into_iter()
+            .map(|(label, details)| SyslogNgConfiguration::transform_grammar_option_to_completion_response(&label, &details))
+            .collect();
+            response.append(&mut res);
+            return Some(CompletionResponse::Array(response));
         }
-
-        if response.len() > 0 {
-            Some(CompletionResponse::Array(response))
-
-        }else {
-            None
-        }
+        
+        None
 
         // from user
     }
@@ -422,7 +417,7 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         let uri = params.text_document_position.text_document.uri.as_str();
         let line_num = params.text_document_position.position.line;
 
-        if let Some(driver) = get_driver_by_position(uri, line_num) {
+        if let Some(driver) = get_block_by_position(uri, line_num) {
             return Some(driver);
         }
 
