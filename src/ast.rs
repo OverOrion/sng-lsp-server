@@ -287,7 +287,7 @@ impl SyslogNgConfiguration {
         }
     }
 
-    pub fn add_object(&mut self, obj:Object) {
+    pub fn add_object(&mut self, obj: Object) {
         self.objects.push(obj);
     }
 
@@ -388,7 +388,7 @@ impl ParsedConfiguration for SyslogNgConfiguration {
             response.append(&mut res);
             return Some(CompletionResponse::Array(response));
         }
-        
+
         None
 
         // from user

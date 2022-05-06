@@ -92,12 +92,13 @@ pub fn get_driver_before_position(uri:&str, line_num: u32) -> Option<String> {
     // <object_type> <id> {
     // <driver> (
 
-        let contents = get_contents(PathBuf::from_str(uri).unwrap()).unwrap().lines();
+        let contents = get_contents(PathBuf::from_str(uri).unwrap()).unwrap();
+        let mut lines = contents.lines();
         let mut contents_before_pos = String::new();
         let mut curr_line_num: u32 = 0;
 
         while curr_line_num < line_num {
-            let curr_line = contents.next()?;
+            let curr_line = lines.next()?;
             curr_line_num += 1;
 
             contents_before_pos.push_str(&curr_line);

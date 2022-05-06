@@ -54,14 +54,15 @@ pub mod objects {
     pub struct Parameter {
         pub option_name: String,
         pub value_type: ValueTypes,
-        pub inner_blocks: Option<Vec<Parameter>>,
+        //pub inner_blocks: Option<Vec<Parameter>>,
     }
     impl Parameter {
-        pub fn new(option_name: String, value_type: ValueTypes, inner_blocks: Option<Vec<Parameter>>) -> Parameter {
+        pub fn new(option_name: String, value_type: ValueTypes, //inner_blocks: Option<Vec<Parameter>>
+        ) -> Parameter {
             Parameter {
                 option_name,
                 value_type,
-                inner_blocks,
+                //inner_blocks,
             }
         }
     }
@@ -120,7 +121,7 @@ pub mod objects {
                 && text_document_position.position <= self_end_pos
         }
 
-        fn set_location(&mut self, uri: &TextDocumentIdentifier, range: &lsp_types::Range) {
+        pub fn set_location(&mut self, uri: &TextDocumentIdentifier, range: &lsp_types::Range) {
             self.location = Some((uri.clone(), range.clone()));
         }
     }

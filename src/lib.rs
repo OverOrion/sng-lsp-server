@@ -8,6 +8,7 @@ use std::sync::{Arc, RwLock};
 
 use ast::{SyslogNgConfiguration, ParsedConfiguration};
 use grammar::grammar_init;
+use parser::parse_conf;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -34,12 +35,14 @@ impl Backend {
 
     fn update_configuration(&self) {}
 
-    fn process_config(&self, content: &str) {
+    fn process_config(&self, content: &str, file_url: &str) {
         let config_lock = &self.configuration.clone();
 
         if let Ok(mut write_guard) = config_lock.write() {
             let mut conf = &mut *write_guard;
             conf.add_configuration(content);
+
+            parse_conf(&content, file_url, conf);
         };
 
     }
@@ -155,7 +158,8 @@ impl LanguageServer for Backend {
 
 
         let content = &doc.text_document.text;
-        self.process_config(&content);
+        let file_url = &doc.text_document.uri.as_str();
+        self.process_config(&content, &file_url);
 
 
         // 

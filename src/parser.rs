@@ -4,11 +4,12 @@ use nom::{
     character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
     combinator::{opt, peek, value},
     error::{Error, ErrorKind, ParseError},
-    multi::{many1, separated_list1},
+    multi::{many1, separated_list1, many0},
     number::complete::double,
     sequence::{delimited, tuple},
     IResult,
 };
+use tower_lsp::lsp_types::{TextDocumentIdentifier, Url, Position};
 
 use crate::{
     ast::SyslogNgConfiguration,
@@ -18,7 +19,7 @@ use crate::{
     },
 };
 
-enum SngSyntaxErrorKind {
+pub enum SngSyntaxErrorKind {
     UnknownObjectType(String),
     MissingIdentifier,
     MissingBraces,
@@ -236,7 +237,7 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
             parse_value_string_or_number,
             parse_value_string,
             parse_value_string_list,
-            parse_inner_block,
+            // parse_inner_block,
         )),
         tag(")"),
     )(input);
@@ -245,26 +246,26 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
         _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Fail))),
     }
 }
-fn parse_inner_block(input: &str) -> IResult<&str, ValueTypes> {
+// fn parse_inner_block(input: &str) -> IResult<&str, ValueTypes> {
 
-    let (input, option_nested_block_name) =  take_while(|c: char| c != '(' && !c.is_whitespace())(input)?;
+//     let (input, option_nested_block_name) =  take_while(|c: char| c != '(' && !c.is_whitespace())(input)?;
 
     
-    let mut option_values:Vec<Parameter> = Vec::new();
-    let (input, option_values) = many1(
-            delimited(
-                tag("("), 
-                    opt(parse_value),
-                tag(")")))(input)?;
+//     let mut option_values:Vec<Parameter> = Vec::new();
+//     let (input, option_values) = many1(
+//             delimited(
+//                 tag("("), 
+//                     opt(parse_value),
+//                 tag(")")))(input)?;
 
-    // match option_value {
-    //     Some(Parameter::new(option_name, value_type, inner_blocks))
+//     // match option_value {
+//     //     Some(Parameter::new(option_name, value_type, inner_blocks))
 
-    // }
+//     // }
 
 
 
-}
+// }
 
 fn match_object_kind(input: &str) -> Option<ObjectKind> {
     match input {
@@ -293,7 +294,11 @@ fn parse_object_option(input: &str) -> IResult<&str, Option<Parameter>> {
     // <option_name>(<arg>?)
     let (input, option_name) = take_while(|c: char| c != '(' && !c.is_whitespace())(input)?;
 
-    let (input, option_value) = delimited(tag("("), opt(parse_value), tag(")"))(input)?;
+    let (input, option_value) = delimited(
+        ws(tag("(")),
+        opt(parse_value),
+        ws(tag(")")))
+        (input)?;
 
     match option_value {
         Some(option_value) => Ok((
@@ -303,7 +308,7 @@ fn parse_object_option(input: &str) -> IResult<&str, Option<Parameter>> {
                 Parameter {
                     option_name,
                     value_type: option_value,
-                    inner_blocks,
+                    //inner_blocks,
                 }
             }),
         )),
@@ -331,7 +336,7 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
     }
 
     let (input, options) =
-        delimited(ws(tag("{")), many1(parse_object_option), ws(tag("};")))(input)?;
+        delimited(ws(tag("{")), many0(parse_object_option), ws(tag("};")))(input)?;
 
     let options = options
         .into_iter()
@@ -349,7 +354,7 @@ fn convert_index_to_human_readable(idx: usize) -> usize {
     idx + 1
 }
 
-fn parse_conf(
+pub fn parse_conf(
     input: &str,
     file_url: &str,
     sng_conf: &mut SyslogNgConfiguration,
@@ -364,8 +369,12 @@ fn parse_conf(
         chunk.push_str(current_line);
 
         // comment
-        if let Some(0) = chunk.find("#") {
-            comment_parser(&chunk);
+        if let Some(0) = chunk.trim().find("#") {
+            let chunk_ro = chunk.clone();
+            let (input, _) = comment_parser(&chunk_ro).unwrap();
+
+            chunk.clear();
+            chunk.push_str(input);
         }
 
         // annotation
@@ -376,6 +385,8 @@ fn parse_conf(
                 Ok((inp, res)) => {
                     if let Some(annotation) = res {
                         sng_conf.add_annotation(annotation);
+
+                        chunk.clear();
                         chunk.push_str(inp);
                     }
                 }
@@ -386,10 +397,25 @@ fn parse_conf(
         // object
         let chunk_ro = chunk.clone();
         if let Ok((_, _)) = peek(parse_object_block)(&chunk_ro) {
+            let obj_span = chunk_ro.lines().count() as u32;
             let res = parse_object_block(&chunk_ro);
             match res {
-                Ok((inp, obj)) => {
+                Ok((inp, mut obj)) => {
+                    obj.set_location(
+                        &TextDocumentIdentifier::new(Url::parse(file_url).unwrap()),
+                        &crate::Range::new(
+                            Position::new(
+                                line_num,
+                                0
+                            ),
+                            Position::new(
+                                line_num + obj_span + 1,
+                                0
+                            )
+                        ));
                     sng_conf.add_object(obj);
+
+                    chunk.clear();
                     chunk.push_str(inp);
                 }
                 Err(e) => return Some(SngSyntaxErrorKind::UnknownObjectType("foobar".to_string())),
