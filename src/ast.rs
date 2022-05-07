@@ -402,11 +402,15 @@ impl ParsedConfiguration for SyslogNgConfiguration {
     fn get_context(&self, params: &CompletionParams) -> Context {
         let text_document_position = &params.text_document_position;
 
+        panic!("objs: {}", format!("{:#?}", self.get_objects()));
+
+
         for obj in self.get_objects() {
             if obj.is_inside_document_position(text_document_position) {
                 return Context::from(obj.get_kind());
             }
         }
+        panic!();
 
         // root
         Context::Root

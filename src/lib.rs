@@ -42,7 +42,7 @@ impl Backend {
             let mut conf = &mut *write_guard;
             conf.add_configuration(content);
 
-            parse_conf(&content, file_url, conf);
+            // parse_conf(&content, file_url, conf);
         };
 
     }
