@@ -1,14 +1,12 @@
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till, take_while},
-    character::{
-        complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
-    },
+    character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
     combinator::{eof, opt, peek},
-    error::{Error, ErrorKind, ParseError, context, VerboseError},
-    multi::{many0, separated_list1, many0_count},
+    error::{context, Error, ErrorKind, ParseError, VerboseError},
+    multi::{many0, many0_count, separated_list1},
     number::complete::double,
-    sequence::{delimited, tuple, preceded, separated_pair},
+    sequence::{delimited, preceded, separated_pair, tuple},
     IResult,
 };
 use tower_lsp::lsp_types::{Position, TextDocumentIdentifier, Url};
@@ -80,32 +78,31 @@ pub fn parse_comments(input: &str) -> IResult<&str, usize> {
     Ok((input, comment_lines))
 }
 
-fn version_parser(input: &str) -> IResult<&str, VersionAnnotation, VerboseError<&str>> {
-    todo!()
+fn version_parser(input: &str) -> IResult<&str, VersionAnnotation> {
     // // let (input, (major_version, _, minor_version)) = tuple((version, tag("."), version))(input)?;
 
-    // let (input, (major_version, minor_version)) = context("@version: x.y",
-    // preceded(
-    //     tuple((ws(tag("@version")), tag(":"))),
-    //     separated_pair(ws(digit1), tag("."), ws(digit1)))
-    // )(input)?;
+     let (input, (major_version, minor_version)) = 
+     preceded(
+         tuple((ws(tag("@version")), tag(":"))),
+         separated_pair(ws(digit1), tag("."), ws(digit1))
+     )(input)?;
 
-    // let major_version = major_version.parse::<u8>();
-    // let major_version = match major_version {
-    //     Ok(major_version) => major_version,
-    //     Err(e) => return Err(nom::Err::Failure(VerboseError::),
-    // };
+    let major_version = major_version.parse::<u8>();
+    let major_version = match major_version {
+        Ok(major_version) => major_version,
+        Err(e) => return Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
+    };
 
-    // let minor_version = minor_version.parse::<u8>();
-    // let minor_version = match minor_version {
-    //     Ok(minor_version) => minor_version,
-    //     Err(e) => return Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
-    // };
+    let minor_version = minor_version.parse::<u8>();
+    let minor_version = match minor_version {
+        Ok(minor_version) => minor_version,
+        Err(e) => return Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
+    };
 
-    // Ok((input, (VersionAnnotation{major_version, minor_version})))
+    Ok((input, (VersionAnnotation{major_version, minor_version})))
 }
 
-/// Parser for annotations (@keyword), 
+/// Parser for annotations (@keyword),
 pub fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
     todo!()
     // let (input, _) = tag("@")(input)?;
@@ -465,21 +462,15 @@ pub fn try_parse_configuration(input: &str, conf: &mut SyslogNgConfiguration) ->
 
 #[cfg(test)]
 mod tests {
-    use std::num::ParseIntError;
-
-    use nom::{InputTakeAtPosition, Finish};
 
     use super::*;
-    //     fn simple() {
-    //         let conf = r###"
+    // #[test]
+    // fn simple() {
+    //     let conf = r###"
     // #############################################################################
     // # Default syslog-ng.conf file which collects all local logs into a
     // # single file called /var/log/messages.
     // #
-
-    // @version: 3.35
-    // @include "scl.conf"
-
     // source s_network_mine {
     //   network(
     //     ip("localhost")
@@ -496,10 +487,10 @@ mod tests {
     // 	destination(d_local);
     // };
     // "###;
-    //         parse_conf(conf, "foobar");
+    //     parse_conf(conf, "foobar");
 
-    //         assert!(true == true);
-    //     }
+    //     assert!(true == true);
+    // }
     #[test]
     fn test_comment_parser_comment_char() {
         let input = "#";
@@ -543,9 +534,15 @@ mod tests {
 
     #[test]
     fn test_version_parser_success() {
-        let input = "3.35";
+        let input = "@version: 3.35";
 
-        let (remainder,VersionAnnotation{major_version, minor_version}) = version_parser(input).unwrap();
+        let (
+            remainder,
+            VersionAnnotation {
+                major_version,
+                minor_version,
+            },
+        ) = version_parser(input).unwrap();
 
         assert_eq!(major_version, 3);
         assert_eq!(minor_version, 35);
@@ -554,6 +551,10 @@ mod tests {
 
     #[test]
     fn test_version_parser_failure_missing_dot() {
-        let input = "335";
+        let input = "@version:335";
+
+        let res = version_parser(input);
+
+        assert!(matches!(res, Err(_)));
     }
 }
