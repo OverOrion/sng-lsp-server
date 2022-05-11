@@ -102,37 +102,38 @@ fn version_parser(input: &str) -> IResult<&str, VersionAnnotation> {
     Ok((input, (VersionAnnotation{major_version, minor_version})))
 }
 
+// pub fn parse_version(input: &str) -> 
+
 /// Parser for annotations (@keyword),
 pub fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
-    todo!()
-    // let (input, _) = tag("@")(input)?;
+    let (input, _) = peek(tag("@"))(input)?;
 
-    // let (input, annotation) = alpha1(input)?;
+    let (input, annotation) = alpha1(input)?;
 
-    // match annotation {
-    //     "version" => {
-    //         let (input, _) = ws(tag(":"))(input)?;
-    //         let (input, (major_version, minor_version)) = version_parser(input)?;
-    //         Ok((
-    //             input,
-    //             Some(Annotation::VA(VersionAnnotation {
-    //                 major_version,
-    //                 minor_version,
-    //             })),
-    //         ))
-    //     }
-    //     "include" => {
-    //         let (input, include) = include_parser(input)?;
-    //         match include {
-    //             Some(include) => Ok((input, Some(Annotation::IA(Some(include))))),
-    //             None => Ok((input, Some(Annotation::IA(None)))),
-    //         }
-    //     }
-    //     _ => {
-    //         let (inp, _) = not_line_ending(input)?;
-    //         Ok((inp, None))
-    //     }
-    // }
+    match annotation {
+        "version" => {
+            let (input, _) = ws(tag(":"))(input)?;
+            let (input, (major_version, minor_version)) = version_parser(input)?;
+            Ok((
+                input,
+                Some(Annotation::VA(VersionAnnotation {
+                    major_version,
+                    minor_version,
+                })),
+            ))
+        }
+        "include" => {
+            let (input, include) = include_parser(input)?;
+            match include {
+                Some(include) => Ok((input, Some(Annotation::IA(Some(include))))),
+                None => Ok((input, Some(Annotation::IA(None)))),
+            }
+        }
+        _ => {
+            let (inp, _) = not_line_ending(input)?;
+            Ok((inp, None))
+        }
+    }
 }
 
 fn include_parser(input: &str) -> IResult<&str, Option<String>> {
