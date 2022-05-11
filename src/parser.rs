@@ -51,7 +51,7 @@ pub enum ValueTypes {
     Path(String),
     String(String),
     StringList(Vec<String>),
-    InnerBlock((String, Option<Vec<ValueTypes>>)), //TemplateContent(String)
+    InnerBlock((String, Vec<ValueTypes>)), //TemplateContent(String)
 }
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
@@ -108,18 +108,15 @@ fn version_parser(input: &str) -> IResult<&str, VersionAnnotation> {
 pub fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
     let (input, _) = peek(tag("@"))(input)?;
 
-    let (input, annotation) = alpha1(input)?;
+    let (input, annotation) = peek(ws(alpha1))(input)?;
 
     match annotation {
         "version" => {
             let (input, _) = ws(tag(":"))(input)?;
-            let (input, (major_version, minor_version)) = version_parser(input)?;
+            let (input, version_anotation) = version_parser(input)?;
             Ok((
                 input,
-                Some(Annotation::VA(VersionAnnotation {
-                    major_version,
-                    minor_version,
-                })),
+                Some(Annotation::VA(version_anotation)),
             ))
         }
         "include" => {
