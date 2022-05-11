@@ -39,7 +39,7 @@ struct SngSyntaxError {
 
 pub enum Annotation {
     VA(VersionAnnotation),
-    IA(Option<IncludeAnnotation>),
+    IA(IncludeAnnotation),
 }
 
 #[derive(Debug)]
@@ -122,8 +122,8 @@ pub fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
         "include" => {
             let (input, include) = include_parser(input)?;
             match include {
-                Some(include) => Ok((input, Some(Annotation::IA(Some(include))))),
-                None => Ok((input, Some(Annotation::IA(None)))),
+                Some(include) => Ok((input, Some(Annotation::IA(include)))),
+                None => Ok((input, None)),
             }
         }
         _ => {
@@ -134,23 +134,21 @@ pub fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
 }
 
 fn include_parser(input: &str) -> IResult<&str, Option<String>> {
-    let input = input.trim();
     // let (input, include) = delimited(
     //     tag("\""),
     //     alt((alphanumeric1, tag("."), tag("*"), tag("?"), tag("/"))),
     //     tag("\""),
     // )(input)?;
 
-    let (input, _) = take_till(|c| c == '\n')(input)?;
+    let (input, include) = ws(take_till(|c| c == '\n'))(input)?;
 
-    Ok((input, None))
 
-    // // ignore scl-root (scl.conf, scl/) as they are implementation details
-    // if include.contains("scl.conf") || include.contains("scl/") {
-    //     Ok((input, None))
-    // } else {
-    //     Ok((input, Some(include.to_owned())))
-    // }
+    // ignore scl-root (scl.conf, scl/) as they are implementation details
+    if include.contains("scl.conf") || include.contains("scl/") {
+        Ok((input, None))
+    } else {
+        Ok((input, Some(include.to_owned())))
+    }
 }
 
 fn parse_value_yesno(input: &str) -> IResult<&str, ValueTypes> {

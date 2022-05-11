@@ -279,11 +279,7 @@ impl SyslogNgConfiguration {
     pub fn add_annotation(&mut self, annotation: Annotation) {
         match annotation {
             Annotation::VA(version) => self.version = version,
-            Annotation::IA(include) => {
-                if let Some(include) = include {
-                    self.includes.push(include)
-                }
-            },
+            Annotation::IA(include) => self.includes.push(include),
         }
     }
 
