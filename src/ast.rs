@@ -21,16 +21,16 @@ pub enum Context {
     Template
 }
 
-impl From<&ObjectKind> for Context {
-    fn from (item: &ObjectKind) -> Self {
+impl From<&str> for Context {
+    fn from (item: &str) -> Self {
         match item {
-                ObjectKind::Source => Context::Source,
-                ObjectKind::Destination => Context::Destination,
-                ObjectKind::Log => Context::Log,
-                ObjectKind::Filter => Context::Filter,
-                ObjectKind::Parser => Context::Parser,
-                ObjectKind::RewriteRule => Context::RewriteRule,
-                ObjectKind::Template => Context::Template,
+                "source" => Context::Source,
+                "destination" => Context::Destination,
+                "log" => Context::Log,
+                "filter" => Context::Filter,
+                "parser" => Context::Parser,
+                "rewrite" => Context::RewriteRule,
+                "template" => Context::Template,
 
                 _ => Context::Root
         }
@@ -398,12 +398,12 @@ impl ParsedConfiguration for SyslogNgConfiguration {
     fn get_context(&self, params: &CompletionParams) -> Context {
         let text_document_position = &params.text_document_position;
 
-        panic!("objs: {}", format!("{:#?}", self.get_objects()));
+        //panic!("objs: {}", format!("{:#?}", self.get_objects()));
 
 
         for obj in self.get_objects() {
             if obj.is_inside_document_position(text_document_position) {
-                return Context::from(obj.get_kind());
+                return Context::from(&obj.get_kind().to_string());
             }
         }
         panic!();
