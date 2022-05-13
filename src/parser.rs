@@ -197,13 +197,12 @@ fn parse_value_non_negative_integer(input: &str) -> IResult<&str, ValueTypes> {
 }
 
 fn parse_value_string_or_number(input: &str) -> IResult<&str, ValueTypes> {
-    let num_or_string: Result<(&str, f64), nom::Err<(&str, ErrorKind)>> =
-        alt(((delimited(tag("\""), double, tag("\""))), double))(input);
+    // let num_or_string: Result<(&str, f64), nom::Err<(&str, ErrorKind)>> =
 
-    match num_or_string {
-        Ok((input, d)) => Ok((input, ValueTypes::StringOrNumber(d.to_string()))),
-        _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Float))),
-    }
+    let (input, double) = 
+        alt(((delimited(tag("\""), double, tag("\""))), double))(input)?;
+
+        Ok((input, ValueTypes::StringOrNumber(double.to_string())))
 }
 
 fn parse_value_string(input: &str) -> IResult<&str, ValueTypes> {
@@ -238,9 +237,7 @@ fn parse_value_string_list(input: &str) -> IResult<&str, ValueTypes> {
 }
 
 pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
-    let value = delimited(
-        tag("("),
-        alt((
+    let value = alt((
             parse_value_yesno,
             parse_value_positive_integer,
             parse_value_non_negative_integer,
@@ -248,8 +245,7 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
             parse_value_string,
             parse_value_string_list,
             // parse_inner_block,
-        )),
-        tag(")"),
+        )
     )(input);
     match value {
         Ok((input, val)) => Ok((input, val)),
@@ -323,8 +319,9 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
     //  <object_type> <id> {
 
     // };
+    print!("{}", format!("content is:{}\n", input));
 
-    let (mut input, kind) = ws(parse_object_kind)(input)?;
+    let (input, kind) = ws(parse_object_kind)(input)?;
 
     let mut id = "";
 
@@ -333,7 +330,7 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
     let (input, opt_id) = opt(ws(take_while(|c| c != '{')))(input)?;
 
     if let Some(matched_id) = opt_id {
-        id = matched_id.trim();
+        id = matched_id;
     }
 
     let (input, options) =
@@ -459,6 +456,10 @@ pub fn try_parse_configuration(input: &str, conf: &mut SyslogNgConfiguration) ->
 #[cfg(test)]
 mod tests {
 
+    use std::{sync::{Arc, RwLock}, fmt::Debug};
+
+    use crate::ast;
+
     use super::*;
     // #[test]
     // fn simple() {
@@ -552,5 +553,24 @@ mod tests {
         let res = version_parser(input);
 
         assert!(matches!(res, Err(_)));
+    }
+    #[test]
+    fn test_parse_object_block_source_object() {
+
+        let input = r###"
+        source s_src {
+            file("/dev/stdin");
+        };
+        "###;
+        print!("{}", format!("input is:{}\n", input));
+    
+        let (remainder, object) = parse_object_block(input).unwrap();
+
+        assert!(remainder.is_empty());
+        
+        assert_eq!(*object.get_kind(), ObjectKind::Source);
+
+
+
     }
 }
