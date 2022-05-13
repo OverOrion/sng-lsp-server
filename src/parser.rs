@@ -207,7 +207,7 @@ fn parse_value_string_or_number(input: &str) -> IResult<&str, ValueTypes> {
 
 fn parse_value_string(input: &str) -> IResult<&str, ValueTypes> {
     let str: Result<(&str, &str), nom::Err<(&str, ErrorKind)>> =
-        delimited(tag("\""), is_not(":"), tag("\""))(input);
+        delimited(tag("\""), take_till(|c| c == ':' || c == '\"' ), tag("\""))(input);
 
     match str {
         Ok((input, str)) => Ok((input, ValueTypes::String(str.to_string()))),
