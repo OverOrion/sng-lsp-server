@@ -297,7 +297,7 @@ fn parse_object_option(input: &str) -> IResult<&str, Option<Parameter>> {
     // <option_name>(<arg>?)
     let (input, option_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
 
-    let (input, option_value) = delimited(ws(tag("(")), opt(parse_value), ws(tag(")")))(input)?;
+    let (input, option_value) = delimited(ws(tag("(")), opt(parse_value), ws(tag(");")))(input)?;
 
     match option_value {
         Some(option_value) => Ok((
