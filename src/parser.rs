@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till, take_while},
-    character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
+    character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending, multispace1},
     combinator::{eof, opt, peek},
     error::{context, Error, ErrorKind, ParseError, VerboseError},
-    multi::{many0, many0_count, separated_list1},
+    multi::{many0, many0_count, separated_list1, separated_list0},
     number::complete::double,
     sequence::{delimited, preceded, separated_pair, tuple},
     IResult,
@@ -15,7 +17,7 @@ use crate::{
     ast::SyslogNgConfiguration,
     language_types::{
         annotations::*,
-        objects::{Object, ObjectKind, Parameter},
+        objects::{Object, ObjectKind, Parameter, Driver},
     },
 };
 
@@ -293,26 +295,49 @@ fn parse_object_kind(input: &str) -> IResult<&str, ObjectKind> {
     Err(nom::Err::Failure(Error::new(input, ErrorKind::Fail)))
 }
 
-fn parse_object_option(input: &str) -> IResult<&str, Option<Parameter>> {
+fn parse_object_option(input: &str) -> IResult<&str, Parameter> {
     // <option_name>(<arg>?)
     let (input, option_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
 
-    let (input, option_value) = delimited(ws(tag("(")), opt(parse_value), ws(tag(");")))(input)?;
+    let (input, option_value) = delimited(ws(tag("(")), (parse_value), ws(tag(");")))(input)?;
+    
+    Ok((input, Parameter::new(option_name.to_owned(), option_value)))
+}
 
-    match option_value {
-        Some(option_value) => Ok((
-            input,
-            Some({
-                let option_name = option_name.to_owned();
-                Parameter {
-                    option_name,
-                    value_type: option_value,
-                    //inner_blocks,
-                }
-            }),
-        )),
-        None => Ok((input, None)),
+fn parse_driver(input: &str) -> IResult<&str, Driver> {
+    // <driver_name>(
+        // ?<requried_option_1>
+        // ?<optional_option_1>(<value>)
+
+    // );
+
+    let (input, _) = ws(tag("("))(input)?;
+
+    let (input, driver_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
+
+    let (input, required_options) = separated_list0(multispace1, take_till(|c: char| c.is_whitespace() || c == '('))(input)?;  
+    
+    let required_options: Vec<String> = required_options
+            .into_iter()
+            .map(|elem| elem.to_owned())
+            .collect();
+    
+    let (input, options) = 
+    separated_list0(multispace0, delimited(ws(tag("(")), 
+            parse_object_option, 
+            ws(tag(")"))))
+            (input)?;  
+    
+    let options: HashMap<String, Parameter> = HashMap::new();
+    for (param_name, param_value) in options {
+        options.insert(param_name, param_value);
     }
+
+    let (input, _) = ws(tag(");"))(input)?;
+
+    Ok((input, Driver::new(driver_name.to_string(), required_options, options)))
+
+
 }
 
 fn parse_object_block(input: &str) -> IResult<&str, Object> {
@@ -326,14 +351,16 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
 
     // optional identifier: anon objects
 
-    let (input, opt_id) = opt(ws(take_till(|c: char| c.is_whitespace())))(input)?;
+    let (input, opt_id) = opt(
+            ws(take_till(|c: char| c.is_whitespace()))
+        )(input)?;
 
     if let Some(matched_id) = opt_id {
         id = matched_id;
     }
 
     let (input, options) =
-        delimited(ws(tag("{")), many0(parse_object_option), ws(tag("};")))(input)?;
+        delimited(ws(tag("{")), many0(parse_driver), ws(tag("};")))(input)?;
 
     let options = options
         .into_iter()
@@ -571,5 +598,44 @@ mod tests {
 
         assert_eq!(object.get_options()[0].option_name, "file");
         assert_eq!(object.get_options()[0].value_type, ValueTypes::String("/dev/stdin".to_string()));
+    }
+
+    #[test]
+    fn test_parse_object_block_source_object_builtin_driver() {
+
+        let input = r###"
+        source s_stdin {
+            stdin();
+        };
+        "###;
+    
+        let (remainder, object) = parse_object_block(input).unwrap();
+
+        assert!(remainder.is_empty());
+        
+        assert_eq!(*object.get_kind(), ObjectKind::Source);
+        assert_eq!(object.get_id(), "s_stdin");
+
+        assert_eq!(object.get_options()[0].option_name, "stdin");
+    }
+
+    #[test]
+    fn test_parse_object_block_destination_object() {
+
+        let input = r###"
+        destination d_stdout {
+            file("/dev/stdout");
+        };
+        "###;
+    
+        let (remainder, object) = parse_object_block(input).unwrap();
+
+        assert!(remainder.is_empty());
+        
+        assert_eq!(*object.get_kind(), ObjectKind::Destination);
+        assert_eq!(object.get_id(), "d_stdout");
+
+        assert_eq!(object.get_options()[0].option_name, "file");
+        assert_eq!(object.get_options()[0].value_type, ValueTypes::String("/dev/stdout".to_string()));
     }
 }

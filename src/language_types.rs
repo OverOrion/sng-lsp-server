@@ -20,6 +20,7 @@ pub struct GlobalOption {
 
 pub mod objects {
     use core::fmt;
+    use std::collections::HashMap;
 
     use tower_lsp::lsp_types::{self, TextDocumentIdentifier, TextDocumentPositionParams};
 
@@ -51,6 +52,32 @@ pub mod objects {
     }
 
     #[derive(Debug, PartialEq, Eq)]
+    pub struct Driver {
+        pub name: String,
+        pub required_options: Vec<String>,
+        pub options: HashMap<String, Parameter>,
+    }
+
+    impl Driver {
+        pub fn new(name: String, required_options: Vec<String>, options: HashMap<String, Parameter>) -> Driver{
+            Driver {
+                name,
+                required_options,
+                options
+            }
+        }
+        
+        pub fn get_options(&self) -> &HashMap<String, Parameter> {
+            &self.options
+        }
+
+        pub fn get_required_options(&self) -> &Vec<String>{
+            &self.required_options
+        }
+
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
     pub struct Parameter {
         pub option_name: String,
         pub value_type: ValueTypes,
@@ -71,7 +98,7 @@ pub mod objects {
     pub struct Object {
         id: String,
         kind: ObjectKind,
-        options: Vec<Parameter>,
+        options: Vec<Driver>,
         location: Option<(TextDocumentIdentifier, lsp_types::Range)>,
     }
 
@@ -79,7 +106,7 @@ pub mod objects {
         pub fn new(
             id: String,
             kind: ObjectKind,
-            options: Vec<Parameter>,
+            options: Vec<Driver>,
             location: Option<(TextDocumentIdentifier, lsp_types::Range)>
         ) -> Object {
             Object {
@@ -92,7 +119,7 @@ pub mod objects {
         pub fn new_without_location(
             id: String,
             kind: ObjectKind,
-            options: Vec<Parameter>,
+            options: Vec<Driver>,
         ) -> Object { Object::new(id, kind, options, None)
         }
         
@@ -100,7 +127,7 @@ pub mod objects {
             &self.id
         }
 
-        pub fn get_options(&self) -> &Vec<Parameter> {
+        pub fn get_options(&self) -> &Vec<Driver> {
             &self.options
         }
 
