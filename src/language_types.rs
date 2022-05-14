@@ -95,6 +95,7 @@ pub mod objects {
             options: Vec<Parameter>,
         ) -> Object { Object::new(id, kind, options, None)
         }
+        
         pub fn get_id(&self) -> &str {
             &self.id
         }
