@@ -50,7 +50,7 @@ pub mod objects {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq)]
     pub struct Parameter {
         pub option_name: String,
         pub value_type: ValueTypes,

@@ -42,7 +42,7 @@ pub enum Annotation {
     IA(IncludeAnnotation),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ValueTypes {
     YesNo(bool),
     PositiveInteger(usize),
@@ -571,7 +571,7 @@ mod tests {
         assert_eq!(*object.get_kind(), ObjectKind::Source);
         assert_eq!(object.get_id(), "s_src");
 
-
-
+        assert_eq!(object.get_options()[0].option_name, "file");
+        assert_eq!(object.get_options()[0].value_type, ValueTypes::String("/dev/stdin".to_string()));
     }
 }
