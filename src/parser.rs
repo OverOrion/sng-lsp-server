@@ -327,7 +327,7 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
 
     // optional identifier: anon objects
 
-    let (input, opt_id) = opt(ws(take_while(|c| c != '{')))(input)?;
+    let (input, opt_id) = opt(ws(take_till(|c: char| c.is_whitespace())))(input)?;
 
     if let Some(matched_id) = opt_id {
         id = matched_id;
@@ -569,6 +569,7 @@ mod tests {
         assert!(remainder.is_empty());
         
         assert_eq!(*object.get_kind(), ObjectKind::Source);
+        assert_eq!(object.get_id(), "s_src");
 
 
 
