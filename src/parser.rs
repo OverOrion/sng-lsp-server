@@ -319,7 +319,6 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
     //  <object_type> <id> {
 
     // };
-    print!("{}", format!("content is:{}\n", input));
 
     let (input, kind) = ws(parse_object_kind)(input)?;
 
@@ -562,7 +561,6 @@ mod tests {
             file("/dev/stdin");
         };
         "###;
-        print!("{}", format!("input is:{}\n", input));
     
         let (remainder, object) = parse_object_block(input).unwrap();
 
