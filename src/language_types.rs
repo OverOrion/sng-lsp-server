@@ -143,7 +143,6 @@ pub mod objects {
 
             let self_start_pos = self_range.start;
             let self_end_pos = self_range.end;
-            panic!();
 
             text_document_position.text_document == *self_uri
                 && self_start_pos <= text_document_position.position

@@ -4,11 +4,11 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till},
     character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
-    combinator::{eof, opt, peek},
+    combinator::{eof, opt, peek, recognize},
     error::{Error, ErrorKind, ParseError},
     multi::{many0, many0_count, separated_list1, many1},
     number::complete::double,
-    sequence::{delimited, preceded, separated_pair, tuple, terminated},
+    sequence::{delimited, preceded, separated_pair, tuple, terminated, pair},
     IResult,
 };
 use tower_lsp::lsp_types::{Position, TextDocumentIdentifier, Url};
@@ -21,6 +21,7 @@ use crate::{
     },
 };
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum SngSyntaxErrorKind {
     UnknownObjectType(String),
     MissingIdentifier,
@@ -54,7 +55,9 @@ pub enum ValueTypes {
     Path(String),
     String(String),
     StringList(Vec<String>),
-    InnerBlock((String, Vec<ValueTypes>)), //TemplateContent(String)
+    InnerBlock((String, Vec<ValueTypes>)),
+    Identifier(String),
+    //TemplateContent(String)
 }
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
@@ -215,6 +218,22 @@ fn parse_value_string(input: &str) -> IResult<&str, ValueTypes> {
     }
 }
 
+/// Parse syslog-ng object identifiers: alphanumeric characters + underscore (_)
+/// From nom_recipes
+fn parse_value_identifier(input: &str) -> IResult<&str, ValueTypes> {
+
+    let res: Result<(&str, &str), nom::Err<(&str, ErrorKind)>>  = recognize(
+            pair(
+              alt((ws(alpha1), ws(tag("_")))),
+              many0_count(alt((ws(alphanumeric1), ws(tag("_"))))))        
+        )(input);
+
+    match res {
+        Ok((input, identifier)) => Ok((input, ValueTypes::Identifier(identifier.to_string()))),
+        _ => Err(nom::Err::Error(Error::new(input, ErrorKind::Not))),
+    }
+}
+
 fn parse_value_string_list(input: &str) -> IResult<&str, ValueTypes> {
     let delim = ":";
     let str_list: Result<(&str, Vec<&str>), nom::Err<(&str, ErrorKind)>> =
@@ -245,6 +264,7 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
             parse_value_string,
             parse_value_string_list,
             // parse_inner_block,
+            parse_value_identifier
         )
     )(input)
 }
@@ -310,7 +330,12 @@ fn parse_driver(input: &str) -> IResult<&str, Driver> {
     let (input, driver_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
     let (input, _) = ws(tag("("))(input)?;
 
-    let (input, required_options) = many0(ws(parse_value_string))(input)?;
+    let (input, required_options) = many0(
+        alt((
+            ws(parse_value_string),
+            ws(parse_value_identifier)
+        )))
+        (input)?;
     
     let (input, options) = opt(
             many1(
@@ -345,7 +370,7 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
     // optional identifier: anon objects
 
     let (input, opt_id) = opt(
-            ws(take_till(|c: char| c.is_whitespace()))
+            ws(take_till(|c: char| c.is_whitespace() || c == '{'))
         )(input)?;
 
     if let Some(matched_id) = opt_id {
@@ -368,7 +393,7 @@ fn convert_index_to_human_readable(idx: usize) -> usize {
 pub fn parse_conf(
     input: &str,
     file_url: &str,
-    // sng_conf: &mut SyslogNgConfiguration,
+    sng_conf: &mut SyslogNgConfiguration,
 ) -> Option<SngSyntaxErrorKind> {
     let mut line_num: u32 = 0;
 
@@ -380,7 +405,8 @@ pub fn parse_conf(
         chunk.push_str(current_line);
         // comment
         if let Some(comment_start_pos) = chunk.find("#") {
-            chunk.truncate(comment_start_pos);
+             chunk.truncate(comment_start_pos);
+            // (chunk, _) = parse_comments(&chunk);
         }
 
         // annotation
@@ -390,7 +416,7 @@ pub fn parse_conf(
             match res {
                 Ok((inp, res)) => {
                     if let Some(annotation) = res {
-                        //sng_conf.add_annotation(annotation);
+                        sng_conf.add_annotation(annotation);
 
                         chunk.clear();
                         chunk.push_str(inp);
@@ -401,8 +427,8 @@ pub fn parse_conf(
         }
 
         // object
-        if let Ok((_, _)) = peek(parse_object_block)(&chunk) {
-            let chunk_ro = chunk.clone();
+          let chunk_ro = chunk.clone();
+        if let Ok((_, _)) = peek(parse_object_block)(&chunk_ro) {
             let obj_span = chunk_ro.lines().count() as u32;
             let res = parse_object_block(&chunk_ro);
             match res {
@@ -414,8 +440,8 @@ pub fn parse_conf(
                             Position::new(line_num + obj_span + 1, 0),
                         ),
                     );
-                    panic!("obj is: {}", format!("{:#?}", obj));
-                    //sng_conf.add_object(obj);
+                    //panic!("obj is: {}", format!("{:#?}", obj));
+                    sng_conf.add_object(obj);
 
                     chunk.clear();
                     chunk.push_str(inp);
@@ -425,6 +451,8 @@ pub fn parse_conf(
         }
         line_num += 1;
     }
+
+    chunk = chunk.trim().to_string();
 
     if chunk.len() > 0 {
         return Some(SngSyntaxErrorKind::UnknownOption("barfoo".to_string()));
@@ -474,33 +502,20 @@ mod tests {
     use crate::ast;
 
     use super::*;
-    // #[test]
-    // fn simple() {
-    //     let conf = r###"
-    // #############################################################################
-    // # Default syslog-ng.conf file which collects all local logs into a
-    // # single file called /var/log/messages.
-    // #
-    // source s_network_mine {
-    //   network(
-    //     ip("localhost")
-    //     transport("udp")
-    //   );
-    // };
 
-    // destination d_local {
-    // 	file("/var/log/messages");
-    // };
+    /// Not thread-safe function for extracting T from Arc<RwLock<T>>
+    fn extract_from_arc_rw_lock<T>(arc_lock: Arc<RwLock<T>>) -> T 
+    where T: Debug
+    {
+        Arc::try_unwrap(arc_lock).unwrap().into_inner().unwrap()
+    }
 
-    // log {
-    // 	source(s_local);
-    // 	destination(d_local);
-    // };
-    // "###;
-    //     parse_conf(conf, "foobar");
+    /// Helper function for extracting SyslogNgConfiguration from Arc<RwLock<>> for testing purposes
+    fn get_syslog_ng_configuration() -> SyslogNgConfiguration {
+        let sng_conf = SyslogNgConfiguration::new();
+        extract_from_arc_rw_lock(sng_conf)
+    }
 
-    //     assert!(true == true);
-    // }
     #[test]
     fn test_comment_parser_comment_char() {
         let input = "#";
@@ -658,5 +673,54 @@ mod tests {
 
         assert_eq!(object.get_drivers()[0].name, "file");
         assert_eq!(object.get_drivers()[0].required_options[0], ValueTypes::String("/dev/stdout".to_string()));
+    }
+
+    #[test]
+    fn test_parse_object_block_log_path_object() {
+        let input = r###"
+        log {
+            source(s_local);
+            destination(d_local);
+        };
+        "###;
+
+        let (remainder, object) = parse_object_block(input).unwrap();
+
+        assert!(remainder.is_empty());
+
+        assert_eq!(*object.get_kind(), ObjectKind::Log);
+    }
+
+     #[test]
+    fn test_parse_object_block_multiple_objects_success() {
+        let mut sng_conf_obj = get_syslog_ng_configuration();
+        let conf = r###"
+    #############################################################################
+    # Default syslog-ng.conf file which collects all local logs into a
+    # single file called /var/log/messages.
+    #
+    source s_network_mine {
+      network(
+        ip("localhost")
+        transport("udp")
+      );
+    };
+
+    destination d_local {
+    	file("/var/log/messages");
+    };
+
+    log {
+    	source(s_local);
+    	destination(d_local);
+    };
+    "###;
+
+        let res = parse_conf(conf, "file:///foo/bar.conf", &mut sng_conf_obj);
+
+        println!("res is: {:#?}", res);
+
+        assert!(matches!(res, None));
+        assert!(true == true);
     }
 }
