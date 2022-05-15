@@ -6,9 +6,9 @@ use nom::{
     character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending, multispace1},
     combinator::{eof, opt, peek},
     error::{context, Error, ErrorKind, ParseError, VerboseError},
-    multi::{many0, many0_count, separated_list1, separated_list0},
+    multi::{many0, many0_count, separated_list1, separated_list0, many1},
     number::complete::double,
-    sequence::{delimited, preceded, separated_pair, tuple},
+    sequence::{delimited, preceded, separated_pair, tuple, terminated},
     IResult,
 };
 use tower_lsp::lsp_types::{Position, TextDocumentIdentifier, Url};
@@ -44,8 +44,9 @@ pub enum Annotation {
     IA(IncludeAnnotation),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ValueTypes {
+    Empty,
     YesNo(bool),
     PositiveInteger(usize),
     NonNegativeInteger(usize),
@@ -153,16 +154,13 @@ fn include_parser(input: &str) -> IResult<&str, Option<String>> {
     }
 }
 
+fn parse_value_empty(input: &str) -> IResult<&str, ValueTypes> {
+    let (input, _) = tag("")(input)?;
+    Ok((input, ValueTypes::Empty))
+}
+
 fn parse_value_yesno(input: &str) -> IResult<&str, ValueTypes> {
-    let (input, yesno) = alt((
-        tag("1"),
-        tag("0"),
-        tag("yes"),
-        tag("no"),
-        tag("on"),
-        tag("off"),
-        digit1,
-    ))(input)?;
+    let (input, yesno) = alphanumeric1(input)?;
 
     let val = yesno;
 
@@ -170,7 +168,7 @@ fn parse_value_yesno(input: &str) -> IResult<&str, ValueTypes> {
         "1" | "yes" | "on" => Ok((input, ValueTypes::YesNo(true))),
         "0" | "no" | "off" => Ok((input, ValueTypes::YesNo(false))),
 
-        _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Alt))),
+        _ => Err(nom::Err::Error(Error::new(input, ErrorKind::Alt))),
     }
 }
 
@@ -185,7 +183,7 @@ fn parse_value_positive_integer(input: &str) -> IResult<&str, ValueTypes> {
                 Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit)))
             }
         }
-        _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
+        _ => Err(nom::Err::Error(Error::new(input, ErrorKind::Digit))),
     }
 }
 
@@ -194,7 +192,7 @@ fn parse_value_non_negative_integer(input: &str) -> IResult<&str, ValueTypes> {
 
     match pos_int.parse::<usize>() {
         Ok(n) => Ok((input, ValueTypes::PositiveInteger(n))),
-        _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Digit))),
+        _ => Err(nom::Err::Error(Error::new(input, ErrorKind::Digit))),
     }
 }
 
@@ -213,7 +211,7 @@ fn parse_value_string(input: &str) -> IResult<&str, ValueTypes> {
 
     match str {
         Ok((input, str)) => Ok((input, ValueTypes::String(str.to_string()))),
-        _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Not))),
+        _ => Err(nom::Err::Error(Error::new(input, ErrorKind::Not))),
     }
 }
 
@@ -231,7 +229,7 @@ fn parse_value_string_list(input: &str) -> IResult<&str, ValueTypes> {
             Ok((input, ValueTypes::StringList(result)))
         }
 
-        _ => Err(nom::Err::Failure(Error::new(
+        _ => Err(nom::Err::Error(Error::new(
             input,
             ErrorKind::SeparatedNonEmptyList,
         ))),
@@ -239,7 +237,7 @@ fn parse_value_string_list(input: &str) -> IResult<&str, ValueTypes> {
 }
 
 pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
-    let value = alt((
+    alt((
             parse_value_yesno,
             parse_value_positive_integer,
             parse_value_non_negative_integer,
@@ -248,11 +246,7 @@ pub fn parse_value(input: &str) -> IResult<&str, ValueTypes> {
             parse_value_string_list,
             // parse_inner_block,
         )
-    )(input);
-    match value {
-        Ok((input, val)) => Ok((input, val)),
-        _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Fail))),
-    }
+    )(input)
 }
 // fn parse_inner_block(input: &str) -> IResult<&str, ValueTypes> {
 
@@ -295,11 +289,13 @@ fn parse_object_kind(input: &str) -> IResult<&str, ObjectKind> {
     Err(nom::Err::Failure(Error::new(input, ErrorKind::Fail)))
 }
 
-fn parse_object_option(input: &str) -> IResult<&str, Parameter> {
+fn parse_driver_option(input: &str) -> IResult<&str, Parameter> {
     // <option_name>(<arg>?)
     let (input, option_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
 
-    let (input, option_value) = delimited(ws(tag("(")), (parse_value), ws(tag(");")))(input)?;
+
+    let (input, option_value) = delimited(ws(tag("(")), parse_value, ws(tag(")")))(input)?;
+
     
     Ok((input, Parameter::new(option_name.to_owned(), option_value)))
 }
@@ -311,31 +307,28 @@ fn parse_driver(input: &str) -> IResult<&str, Driver> {
 
     // );
 
+    let (input, driver_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
     let (input, _) = ws(tag("("))(input)?;
 
-    let (input, driver_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
+    let (input, required_options) = many0(ws(parse_value_string))(input)?;
+    
+    let (input, options) = opt(
+            many1(
+                terminated(ws(parse_driver_option),
+                    opt(tag(",")))))
+    (input)?;  
+    
+    let mut options_map: HashMap<String, Parameter> = HashMap::new();
 
-    let (input, required_options) = separated_list0(multispace1, take_till(|c: char| c.is_whitespace() || c == '('))(input)?;  
-    
-    let required_options: Vec<String> = required_options
-            .into_iter()
-            .map(|elem| elem.to_owned())
-            .collect();
-    
-    let (input, options) = 
-    separated_list0(multispace0, delimited(ws(tag("(")), 
-            parse_object_option, 
-            ws(tag(")"))))
-            (input)?;  
-    
-    let options: HashMap<String, Parameter> = HashMap::new();
-    for (param_name, param_value) in options {
-        options.insert(param_name, param_value);
+    if let Some(options) = options {
+        for param in &options {
+            options_map.insert(param.option_name.to_string(), param.clone());
+        }
     }
 
     let (input, _) = ws(tag(");"))(input)?;
 
-    Ok((input, Driver::new(driver_name.to_string(), required_options, options)))
+    Ok((input, Driver::new(driver_name.to_string(), required_options, options_map)))
 
 
 }
@@ -359,18 +352,12 @@ fn parse_object_block(input: &str) -> IResult<&str, Object> {
         id = matched_id;
     }
 
-    let (input, options) =
+    let (input, drivers) =
         delimited(ws(tag("{")), many0(parse_driver), ws(tag("};")))(input)?;
-
-    let options = options
-        .into_iter()
-        .filter(|option| option.is_some())
-        .map(|option| option.unwrap())
-        .collect();
 
     Ok((
         input,
-        Object::new_without_location(id.to_string(), kind, options),
+        Object::new_without_location(id.to_string(), kind, drivers),
     ))
 }
 
@@ -580,6 +567,18 @@ mod tests {
 
         assert!(matches!(res, Err(_)));
     }
+
+    #[test]
+    fn test_parse_value_yesno_failure() {
+
+        let input = "10";
+
+        let res = parse_value_yesno(input);
+
+        assert!(matches!(res, Err(_)));
+
+    }
+
     #[test]
     fn test_parse_object_block_source_object() {
 
@@ -596,12 +595,12 @@ mod tests {
         assert_eq!(*object.get_kind(), ObjectKind::Source);
         assert_eq!(object.get_id(), "s_src");
 
-        assert_eq!(object.get_options()[0].option_name, "file");
-        assert_eq!(object.get_options()[0].value_type, ValueTypes::String("/dev/stdin".to_string()));
+        assert_eq!(object.get_drivers()[0].name, "file");
+        assert_eq!(object.get_drivers()[0].required_options[0], ValueTypes::String("/dev/stdin".to_string()));
     }
 
     #[test]
-    fn test_parse_object_block_source_object_builtin_driver() {
+    fn test_parse_object_block_source_object_builtin_stdin_driver() {
 
         let input = r###"
         source s_stdin {
@@ -616,7 +615,29 @@ mod tests {
         assert_eq!(*object.get_kind(), ObjectKind::Source);
         assert_eq!(object.get_id(), "s_stdin");
 
-        assert_eq!(object.get_options()[0].option_name, "stdin");
+        assert_eq!(object.get_drivers()[0].name, "stdin");
+    }
+
+    #[test]
+    fn test_parse_object_block_source_object_builtin_unix_stream_driver() {
+
+        let input = r###"
+        source s_unix_stream {
+            unix-stream(
+                "/path/to/socket"
+                max-connections(10)
+            );
+        };
+        "###;
+    
+        let (remainder, object) = parse_object_block(input).unwrap();
+
+        assert!(remainder.is_empty());
+        
+        assert_eq!(*object.get_kind(), ObjectKind::Source);
+        assert_eq!(object.get_id(), "s_unix_stream");
+
+        assert_eq!(object.get_drivers()[0].name, "unix-stream");
     }
 
     #[test]
@@ -635,7 +656,7 @@ mod tests {
         assert_eq!(*object.get_kind(), ObjectKind::Destination);
         assert_eq!(object.get_id(), "d_stdout");
 
-        assert_eq!(object.get_options()[0].option_name, "file");
-        assert_eq!(object.get_options()[0].value_type, ValueTypes::String("/dev/stdout".to_string()));
+        assert_eq!(object.get_drivers()[0].name, "file");
+        assert_eq!(object.get_drivers()[0].required_options[0], ValueTypes::String("/dev/stdout".to_string()));
     }
 }

@@ -54,12 +54,12 @@ pub mod objects {
     #[derive(Debug, PartialEq, Eq)]
     pub struct Driver {
         pub name: String,
-        pub required_options: Vec<String>,
+        pub required_options: Vec<ValueTypes>,
         pub options: HashMap<String, Parameter>,
     }
 
     impl Driver {
-        pub fn new(name: String, required_options: Vec<String>, options: HashMap<String, Parameter>) -> Driver{
+        pub fn new(name: String, required_options: Vec<ValueTypes>, options: HashMap<String, Parameter>) -> Driver{
             Driver {
                 name,
                 required_options,
@@ -71,13 +71,13 @@ pub mod objects {
             &self.options
         }
 
-        pub fn get_required_options(&self) -> &Vec<String>{
+        pub fn get_required_options(&self) -> &Vec<ValueTypes>{
             &self.required_options
         }
 
     }
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Parameter {
         pub option_name: String,
         pub value_type: ValueTypes,
@@ -98,7 +98,7 @@ pub mod objects {
     pub struct Object {
         id: String,
         kind: ObjectKind,
-        options: Vec<Driver>,
+        drivers: Vec<Driver>,
         location: Option<(TextDocumentIdentifier, lsp_types::Range)>,
     }
 
@@ -106,13 +106,13 @@ pub mod objects {
         pub fn new(
             id: String,
             kind: ObjectKind,
-            options: Vec<Driver>,
+            drivers: Vec<Driver>,
             location: Option<(TextDocumentIdentifier, lsp_types::Range)>
         ) -> Object {
             Object {
                 id,
                 kind,
-                options,
+                drivers,
                 location,
             }
         }
@@ -127,8 +127,8 @@ pub mod objects {
             &self.id
         }
 
-        pub fn get_options(&self) -> &Vec<Driver> {
-            &self.options
+        pub fn get_drivers(&self) -> &Vec<Driver> {
+            &self.drivers
         }
 
         pub fn get_kind(&self) -> &ObjectKind {
