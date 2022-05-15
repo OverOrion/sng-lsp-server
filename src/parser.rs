@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take_till, take_while},
-    character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending, multispace1},
+    bytes::complete::{is_not, tag, take_till},
+    character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
     combinator::{eof, opt, peek},
-    error::{context, Error, ErrorKind, ParseError, VerboseError},
-    multi::{many0, many0_count, separated_list1, separated_list0, many1},
+    error::{Error, ErrorKind, ParseError},
+    multi::{many0, many0_count, separated_list1, many1},
     number::complete::double,
     sequence::{delimited, preceded, separated_pair, tuple, terminated},
     IResult,
