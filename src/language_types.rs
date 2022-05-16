@@ -147,6 +147,17 @@ pub mod objects {
             &self.kind
         }
 
+        pub fn get_location(&self) -> &Option<(TextDocumentIdentifier, lsp_types::Range)> {
+            &self.location
+        }
+
+        pub fn get_start_and_end_position(&self) -> Option<&lsp_types::Range> {
+            if let Some(loc) = &self.location {
+                return Some(&loc.1);
+            }
+            None
+        }
+
         pub fn is_inside_document_position(
             &self,
             text_document_position: &TextDocumentPositionParams,

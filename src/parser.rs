@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, cmp::max};
 
 use nom::{
     branch::alt,
@@ -415,6 +415,7 @@ pub fn parse_conf(
 
     while let Some(current_line) = lines.next() {
         chunk.push_str(current_line);
+        chunk.push_str("\n");
         // comment
         if let Some(comment_start_pos) = chunk.find("#") {
              chunk.truncate(comment_start_pos);
@@ -441,15 +442,15 @@ pub fn parse_conf(
         // object
           let chunk_ro = chunk.clone();
         if let Ok((_, _)) = peek(parse_object_block)(&chunk_ro) {
-            let obj_span = chunk_ro.lines().count() as u32;
+            let obj_span = max(chunk_ro.lines().count() as u32 - 1, 1);
             let res = parse_object_block(&chunk_ro);
             match res {
                 Ok((inp, mut obj)) => {
                     obj.set_location(
                         &TextDocumentIdentifier::new(Url::parse(file_url).unwrap()),
                         &crate::Range::new(
-                            Position::new(line_num, 0),
-                            Position::new(line_num + obj_span + 1, 0),
+                            Position::new(line_num - obj_span + 1, 0),
+                            Position::new(line_num + 1 , 0),
                         ),
                     );
                     //panic!("obj is: {}", format!("{:#?}", obj));
@@ -458,7 +459,7 @@ pub fn parse_conf(
                     chunk.clear();
                     chunk.push_str(inp);
                 }
-                Err(e) => return Some(SngSyntaxErrorKind::UnknownObjectType("foobar".to_string())),
+                Err(e) => return Some(SngSyntaxErrorKind::UnknownObjectType(chunk_ro.to_owned())),
             }
         }
         line_num += 1;
@@ -762,19 +763,21 @@ mod tests {
 
         assert_eq!(objects[0].get_drivers()[0].get_name(), "network");
 
-        println!("HM is: {:#?}", objects[0].get_drivers()[0]);
-
         let s_network_mine = &objects[0];
         assert_eq!(*s_network_mine.get_kind(), ObjectKind::Source);
+        assert_eq!(*s_network_mine.get_start_and_end_position().unwrap(), crate::Range::new(Position::new(5, 0),Position::new(11 , 0)));
         assert_eq!(*s_network_mine.get_drivers()[0].get_options()["transport"].get_value_type(), ValueTypes::String("udp".to_string()));
         assert_eq!(*s_network_mine.get_drivers()[0].get_options()["ip"].get_value_type(), ValueTypes::String("localhost".to_string()));
+        
 
         let d_local = &objects[1];
         assert_eq!(*d_local.get_kind(), ObjectKind::Destination);
+        assert_eq!(*d_local.get_start_and_end_position().unwrap(), crate::Range::new(Position::new(12, 0),Position::new(15 , 0)));
         assert_eq!(d_local.get_drivers()[0].get_required_options()[0], ValueTypes::String("/var/log/messages".to_string()));
 
         let log_path_1 = &objects[2];
         assert_eq!(*log_path_1.get_kind(), ObjectKind::Log);
+        assert_eq!(*log_path_1.get_start_and_end_position().unwrap(), crate::Range::new(Position::new(16, 0),Position::new(20 , 0)));
         assert_eq!(log_path_1.get_drivers()[0].get_required_options()[0], ValueTypes::Identifier("s_local".to_string()));
         assert_eq!(log_path_1.get_drivers()[1].get_required_options()[0], ValueTypes::Identifier("d_local".to_string()));
     }
