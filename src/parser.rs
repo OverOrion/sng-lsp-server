@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_till},
     character::complete::{alpha1, alphanumeric1, digit1, multispace0, not_line_ending},
-    combinator::{eof, opt, peek, recognize},
+    combinator::{eof, opt, peek, recognize, not},
     error::{Error, ErrorKind, ParseError},
     multi::{many0, many0_count, separated_list1, many1},
     number::complete::double,
@@ -320,6 +320,23 @@ fn parse_driver_option(input: &str) -> IResult<&str, Parameter> {
     Ok((input, Parameter::new(option_name.to_owned(), option_value)))
 }
 
+fn parse_positional_options(input: &str) -> IResult<&str, Vec<ValueTypes>> {
+    let (input, pos_opts) = 
+    many0(
+        alt((
+            ws(parse_value_string),
+            terminated(
+            ws(parse_value_identifier),
+            peek(not(ws(tag("("))))
+            ),
+        )))
+        (input)?;
+    let _ = peek(not(ws(tag("("))))(input)?;
+    
+    
+    Ok((input, pos_opts))
+}
+
 fn parse_driver(input: &str) -> IResult<&str, Driver> {
     // <driver_name>(
         // ?<requried_option_1>
@@ -330,12 +347,7 @@ fn parse_driver(input: &str) -> IResult<&str, Driver> {
     let (input, driver_name) = take_till(|c: char| c == '(' || c.is_whitespace())(input)?;
     let (input, _) = ws(tag("("))(input)?;
 
-    let (input, required_options) = many0(
-        alt((
-            ws(parse_value_string),
-            ws(parse_value_identifier)
-        )))
-        (input)?;
+    let (input, required_options) = parse_positional_options(input)?;
     
     let (input, options) = opt(
             many1(
@@ -499,7 +511,7 @@ mod tests {
 
     use std::{sync::{Arc, RwLock}, fmt::Debug};
 
-    use crate::ast;
+    use crate::ast::{self, AST};
 
     use super::*;
 
@@ -691,6 +703,29 @@ mod tests {
         assert_eq!(*object.get_kind(), ObjectKind::Log);
     }
 
+    #[test]
+    fn test_() {
+        let input = r###"
+        source s_network_mine {
+            network(
+              ip("localhost")
+              transport("udp")
+            );
+        };
+        "###;
+
+        let (remainder, object) = parse_object_block(input).unwrap();
+
+        assert!(remainder.is_empty());
+
+        assert_eq!(*object.get_kind(), ObjectKind::Source);
+
+        assert_eq!(*object.get_drivers()[0].get_options()["transport"].get_value_type(), ValueTypes::String("udp".to_string()));
+        assert_eq!(*object.get_drivers()[0].get_options()["ip"].get_value_type(), ValueTypes::String("localhost".to_string()));
+    }
+
+
+
      #[test]
     fn test_parse_object_block_multiple_objects_success() {
         let mut sng_conf_obj = get_syslog_ng_configuration();
@@ -718,9 +753,29 @@ mod tests {
 
         let res = parse_conf(conf, "file:///foo/bar.conf", &mut sng_conf_obj);
 
-        println!("res is: {:#?}", res);
-
         assert!(matches!(res, None));
-        assert!(true == true);
+
+        let objects = sng_conf_obj.get_objects();
+        assert_eq!(*objects[0].get_kind(), ObjectKind::Source);
+        assert_eq!(objects[0].get_id(), "s_network_mine");
+
+
+        assert_eq!(objects[0].get_drivers()[0].get_name(), "network");
+
+        println!("HM is: {:#?}", objects[0].get_drivers()[0]);
+
+        let s_network_mine = &objects[0];
+        assert_eq!(*s_network_mine.get_kind(), ObjectKind::Source);
+        assert_eq!(*s_network_mine.get_drivers()[0].get_options()["transport"].get_value_type(), ValueTypes::String("udp".to_string()));
+        assert_eq!(*s_network_mine.get_drivers()[0].get_options()["ip"].get_value_type(), ValueTypes::String("localhost".to_string()));
+
+        let d_local = &objects[1];
+        assert_eq!(*d_local.get_kind(), ObjectKind::Destination);
+        assert_eq!(d_local.get_drivers()[0].get_required_options()[0], ValueTypes::String("/var/log/messages".to_string()));
+
+        let log_path_1 = &objects[2];
+        assert_eq!(*log_path_1.get_kind(), ObjectKind::Log);
+        assert_eq!(log_path_1.get_drivers()[0].get_required_options()[0], ValueTypes::Identifier("s_local".to_string()));
+        assert_eq!(log_path_1.get_drivers()[1].get_required_options()[0], ValueTypes::Identifier("d_local".to_string()));
     }
 }

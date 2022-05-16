@@ -66,6 +66,10 @@ pub mod objects {
                 options
             }
         }
+
+        pub fn get_name(&self) -> &str {
+            &self.name
+        }
         
         pub fn get_options(&self) -> &HashMap<String, Parameter> {
             &self.options
@@ -91,6 +95,14 @@ pub mod objects {
                 value_type,
                 //inner_blocks,
             }
+        }
+
+        pub fn get_option_name(&self) -> &str {
+            &self.option_name
+        }
+
+        pub fn get_value_type(&self) -> &ValueTypes {
+            &self.value_type
         }
     }
 
