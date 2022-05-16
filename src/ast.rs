@@ -8,6 +8,7 @@ use crate::{language_types::{objects::{Object, ObjectKind, self}, GlobalOption, 
 
 
 
+#[derive(Debug)]
 pub enum Context {
     Root,
 
@@ -373,11 +374,13 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         let file_path_2 = params.text_document_position.text_document.uri.to_file_path().unwrap();
         let line_num = params.text_document_position.position.line;
 
-        let(driver, inner_block)  = (get_driver_before_position(file_path_1, line_num), get_block_by_position(file_path_2, line_num));
+        let(driver, _)  = (get_driver_before_position(file_path_1, line_num), get_block_by_position(file_path_2, line_num));
         // let driver = opt_obj.map_or(None, |_| Some(opt_obj.unwrap().get_drivers()));
         if let Some(driver) = driver {
+            //panic!("{}", format!("\ncontext: {:#?}\n obj: {:#?}\n, driver: {:#?}", context, opt_obj, driver));
             let mut res:Vec<CompletionItem> 
-            = grammar_get_all_options(&object_type, &driver, &inner_block)?
+           // = grammar_get_all_options(&object_type, &driver, &inner_block)?
+           = grammar_get_all_options(&object_type, &driver, &None)?
             .into_iter()
             .map(|(label, details)| SyslogNgConfiguration::transform_grammar_option_to_completion_response(&label, &details))
             .collect();
@@ -398,15 +401,11 @@ impl ParsedConfiguration for SyslogNgConfiguration {
     fn get_context(&self, params: &CompletionParams) -> (Context, Option<&Object>) {
         let text_document_position = &params.text_document_position;
 
-        // panic!("objs: {}", format!("{:#?}", self.get_objects()));
-
-
         for obj in self.get_objects() {
             if obj.is_inside_document_position(text_document_position) {
                 return (Context::from(obj.get_kind()), Some(obj));
             }
         }
-        //panic!();
 
         // root
         (Context::Root, None)

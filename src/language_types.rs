@@ -169,7 +169,7 @@ pub mod objects {
 
             text_document_position.text_document == *self_uri
                 && self_start_pos <= text_document_position.position
-                && text_document_position.position <= self_end_pos
+                && text_document_position.position < self_end_pos
         }
 
         pub fn set_location(&mut self, uri: &TextDocumentIdentifier, range: &lsp_types::Range) {
