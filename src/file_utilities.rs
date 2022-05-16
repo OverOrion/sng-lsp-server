@@ -67,8 +67,8 @@ pub fn get_main_config_file(current_dir: &str) -> std::io::Result<PathBuf> {
     Err(Error::new(ErrorKind::NotFound, "Could not find file with @version, make sure one (and only one) file contains it"))
 }
 
-pub fn get_block_by_position(uri: &str, line_num: u32) -> Option<String> {
-    let contents = get_contents(PathBuf::from_str(uri).unwrap());
+pub fn get_block_by_position(path_buffer: PathBuf, line_num: u32) -> Option<String> {
+    let contents = get_contents(path_buffer);
     let mut buf = vec![];
 
     if let Ok(contents) = contents {
@@ -88,11 +88,11 @@ pub fn get_block_by_position(uri: &str, line_num: u32) -> Option<String> {
     None
 }
 
-pub fn get_driver_before_position(uri:&str, line_num: u32) -> Option<String> {
+pub fn get_driver_before_position(path_buffer: PathBuf, line_num: u32) -> Option<String> {
     // <object_type> <id> {
     // <driver> (
 
-        let contents = get_contents(PathBuf::from_str(uri).unwrap()).unwrap();
+        let contents = get_contents(path_buffer).unwrap();
         let mut lines = contents.lines();
         let mut contents_before_pos = String::new();
         let mut curr_line_num: u32 = 0;

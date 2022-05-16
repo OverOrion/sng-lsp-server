@@ -112,13 +112,14 @@ fn version_parser(input: &str) -> IResult<&str, VersionAnnotation> {
 
 /// Parser for annotations (@keyword),
 pub fn annotation_parser(input: &str) -> IResult<&str, Option<Annotation>> {
-    let (input, _) = peek(tag("@"))(input)?;
-
-    let (input, annotation) = peek(ws(alpha1))(input)?;
+    let (input, annotation) = peek(
+        preceded(
+            ws(tag("@")),
+        ws(alpha1)))
+        (input)?;
 
     match annotation {
         "version" => {
-            let (input, _) = ws(tag(":"))(input)?;
             let (input, version_anotation) = version_parser(input)?;
             Ok((
                 input,
@@ -146,7 +147,11 @@ fn include_parser(input: &str) -> IResult<&str, Option<String>> {
     //     tag("\""),
     // )(input)?;
 
-    let (input, include) = ws(take_till(|c| c == '\n'))(input)?;
+    let (input, include) = 
+    preceded(
+        ws(tag("@include")),
+        ws(take_till(|c| c == '\n')))
+    (input)?;
 
 
     // ignore scl-root (scl.conf, scl/) as they are implementation details
@@ -423,8 +428,8 @@ pub fn parse_conf(
         }
 
         // annotation
-        if let Some(0) = chunk.trim().find("@") {
-            let chunk_ro = chunk.clone();
+        let chunk_ro = chunk.clone();
+        if let Ok((_, _)) = peek(annotation_parser)(&chunk_ro) {
             let res = annotation_parser(&chunk_ro);
             match res {
                 Ok((inp, res)) => {
@@ -440,7 +445,8 @@ pub fn parse_conf(
         }
 
         // object
-          let chunk_ro = chunk.clone();
+        // panic!("parse_conf is: {:#?}", format!("variables are: {:#?}, {:#?} {:#?}", input, file_url,sng_conf ));
+          let chunk_ro = chunk.trim_start().to_owned();
         if let Ok((_, _)) = peek(parse_object_block)(&chunk_ro) {
             let obj_span = max(chunk_ro.lines().count() as u32 - 1, 1);
             let res = parse_object_block(&chunk_ro);
@@ -449,7 +455,7 @@ pub fn parse_conf(
                     obj.set_location(
                         &TextDocumentIdentifier::new(Url::parse(file_url).unwrap()),
                         &crate::Range::new(
-                            Position::new(line_num - obj_span + 1, 0),
+                            Position::new(line_num - obj_span, 0),
                             Position::new(line_num + 1 , 0),
                         ),
                     );
@@ -468,7 +474,7 @@ pub fn parse_conf(
     chunk = chunk.trim().to_string();
 
     if chunk.len() > 0 {
-        return Some(SngSyntaxErrorKind::UnknownOption("barfoo".to_string()));
+        return Some(SngSyntaxErrorKind::UnknownOption(chunk.to_string()));
     }
 
     None
@@ -725,8 +731,6 @@ mod tests {
         assert_eq!(*object.get_drivers()[0].get_options()["ip"].get_value_type(), ValueTypes::String("localhost".to_string()));
     }
 
-
-
      #[test]
     fn test_parse_object_block_multiple_objects_success() {
         let mut sng_conf_obj = get_syslog_ng_configuration();
@@ -755,6 +759,61 @@ mod tests {
         let res = parse_conf(conf, "file:///foo/bar.conf", &mut sng_conf_obj);
 
         assert!(matches!(res, None));
+
+        let objects = sng_conf_obj.get_objects();
+        assert_eq!(*objects[0].get_kind(), ObjectKind::Source);
+        assert_eq!(objects[0].get_id(), "s_network_mine");
+
+
+        assert_eq!(objects[0].get_drivers()[0].get_name(), "network");
+
+        let s_network_mine = &objects[0];
+        assert_eq!(*s_network_mine.get_kind(), ObjectKind::Source);
+        assert_eq!(*s_network_mine.get_start_and_end_position().unwrap(), crate::Range::new(Position::new(5, 0),Position::new(11 , 0)));
+        assert_eq!(*s_network_mine.get_drivers()[0].get_options()["transport"].get_value_type(), ValueTypes::String("udp".to_string()));
+        assert_eq!(*s_network_mine.get_drivers()[0].get_options()["ip"].get_value_type(), ValueTypes::String("localhost".to_string()));
+        
+
+        let d_local = &objects[1];
+        assert_eq!(*d_local.get_kind(), ObjectKind::Destination);
+        assert_eq!(*d_local.get_start_and_end_position().unwrap(), crate::Range::new(Position::new(12, 0),Position::new(15 , 0)));
+        assert_eq!(d_local.get_drivers()[0].get_required_options()[0], ValueTypes::String("/var/log/messages".to_string()));
+
+        let log_path_1 = &objects[2];
+        assert_eq!(*log_path_1.get_kind(), ObjectKind::Log);
+        assert_eq!(*log_path_1.get_start_and_end_position().unwrap(), crate::Range::new(Position::new(16, 0),Position::new(20 , 0)));
+        assert_eq!(log_path_1.get_drivers()[0].get_required_options()[0], ValueTypes::Identifier("s_local".to_string()));
+        assert_eq!(log_path_1.get_drivers()[1].get_required_options()[0], ValueTypes::Identifier("d_local".to_string()));
+    }
+
+    #[test]
+    fn test_parse_object_block_multiple_objects_with_annotation_success() {
+        let mut sng_conf_obj = get_syslog_ng_configuration();
+        let conf = r###"
+    #############################################################################
+    # Default syslog-ng.conf file which collects all local logs into a
+    # single file called /var/log/messages.
+    @version: 3.35
+    source s_network_mine {
+      network(
+        ip("localhost")
+        transport("udp")
+      );
+    };
+
+    destination d_local {
+    	file("/var/log/messages");
+    };
+
+    log {
+    	source(s_local);
+    	destination(d_local);
+    };
+    "###;
+
+        let res = parse_conf(conf, "file:///foo/bar.conf", &mut sng_conf_obj);
+
+        assert_eq!(res, None);
 
         let objects = sng_conf_obj.get_objects();
         assert_eq!(*objects[0].get_kind(), ObjectKind::Source);

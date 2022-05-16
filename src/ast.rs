@@ -282,6 +282,7 @@ impl SyslogNgConfiguration {
     }
 
     pub fn add_object(&mut self, obj: Object) {
+        //panic!("added obj is, and self is: {}", format!("{:#?}, {:#?}", obj, self));
         self.objects.push(obj);
     }
 
@@ -319,7 +320,7 @@ pub trait ParsedConfiguration: AST {
     
     fn get_diagnostics(&self) -> Vec<Diagnostic>;
     fn get_code_completion(&self, params: &CompletionParams) -> Option<CompletionResponse>;
-    fn get_context(&self, params: &CompletionParams) -> Context;
+    fn get_context(&self, params: &CompletionParams) -> (Context, Option<&Object>);
 
     fn is_inside_concrete_driver(&self, params:&CompletionParams) -> Option<String>;
 
@@ -346,7 +347,7 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         let mut object_type = String::from("");
         
         // let object_in = 
-        let context = self.get_context(params);
+        let (context, opt_obj) = self.get_context(params);
         match context {
             Context::Root => {
                 for kw in grammar_get_root_level_keywords().into_iter() {
@@ -368,11 +369,12 @@ impl ParsedConfiguration for SyslogNgConfiguration {
             Context::Template => todo!(),
         }
 
-        let uri = params.text_document_position.text_document.uri.as_str();
+        let file_path_1 = params.text_document_position.text_document.uri.to_file_path().unwrap();
+        let file_path_2 = params.text_document_position.text_document.uri.to_file_path().unwrap();
         let line_num = params.text_document_position.position.line;
 
-        let driver = get_driver_before_position(uri, line_num);
-        let inner_block = get_block_by_position(uri, line_num);
+        let(driver, inner_block)  = (get_driver_before_position(file_path_1, line_num), get_block_by_position(file_path_2, line_num));
+        // let driver = opt_obj.map_or(None, |_| Some(opt_obj.unwrap().get_drivers()));
         if let Some(driver) = driver {
             let mut res:Vec<CompletionItem> 
             = grammar_get_all_options(&object_type, &driver, &inner_block)?
@@ -393,29 +395,29 @@ impl ParsedConfiguration for SyslogNgConfiguration {
     }
     
 
-    fn get_context(&self, params: &CompletionParams) -> Context {
+    fn get_context(&self, params: &CompletionParams) -> (Context, Option<&Object>) {
         let text_document_position = &params.text_document_position;
 
-        //panic!("objs: {}", format!("{:#?}", self.get_objects()));
+        // panic!("objs: {}", format!("{:#?}", self.get_objects()));
 
 
         for obj in self.get_objects() {
             if obj.is_inside_document_position(text_document_position) {
-                return Context::from(obj.get_kind());
+                return (Context::from(obj.get_kind()), Some(obj));
             }
         }
         //panic!();
 
         // root
-        Context::Root
+        (Context::Root, None)
     }
 
     fn is_inside_concrete_driver(&self, params: &CompletionParams) -> Option<String> {
 
-        let uri = params.text_document_position.text_document.uri.as_str();
+        let file_path = params.text_document_position.text_document.uri.to_file_path().unwrap();
         let line_num = params.text_document_position.position.line;
 
-        if let Some(driver) = get_block_by_position(uri, line_num) {
+        if let Some(driver) = get_block_by_position(file_path, line_num) {
             return Some(driver);
         }
 
@@ -425,11 +427,6 @@ impl ParsedConfiguration for SyslogNgConfiguration {
 
     fn add_diagnostics(&mut self, diag: Diagnostic) {
         todo!()
-
-
-
-        
-
     }
     
 }
