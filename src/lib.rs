@@ -7,6 +7,7 @@ pub mod parser;
 use std::sync::{Arc, RwLock};
 
 use ast::{SyslogNgConfiguration, ParsedConfiguration};
+use file_utilities::get_contents;
 use grammar::grammar_init;
 use parser::parse_conf;
 use serde_json::Value;
@@ -175,10 +176,15 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn did_save(&self, _: DidSaveTextDocumentParams) {
+    async fn did_save(&self, doc: DidSaveTextDocumentParams) {
         self.client
             .log_message(MessageType::INFO, "file saved!")
             .await;
+
+            let path_buffer = doc.text_document.uri.to_file_path().unwrap();
+            let content = get_contents(path_buffer).unwrap();
+            let file_url = &doc.text_document.uri.as_str();
+            self.process_config(&content, &file_url);
     }
 
     async fn did_close(&self, _: DidCloseTextDocumentParams) {

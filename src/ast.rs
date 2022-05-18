@@ -289,7 +289,12 @@ impl SyslogNgConfiguration {
 
     pub fn transform_grammar_option_to_completion_response(label: &str, details: &str) -> CompletionItem {
         // inp := option_name(<option_type>)
-        CompletionItem::new_simple(label.to_string(), details.to_owned())
+        let mut completion_item = CompletionItem::new_simple(label.to_string(), details.to_owned());
+
+        // completion_item.insert_text_format = Some(lsp_types::InsertTextFormat::SNIPPET);
+
+        // completion_item.detail = Some(format!("${{$1:{}}}", details.to_owned()));
+        completion_item
     }
 
     pub fn set_workspace_folder(&mut self, url: &Url) {
@@ -320,6 +325,7 @@ pub trait ParsedConfiguration: AST {
     fn validate(&self);
     
     fn get_diagnostics(&self) -> Vec<Diagnostic>;
+    fn get_objects_as_completion_items(&self) -> Option<CompletionResponse>;
     fn get_code_completion(&self, params: &CompletionParams) -> Option<CompletionResponse>;
     fn get_context(&self, params: &CompletionParams) -> (Context, Option<&Object>);
 
@@ -343,6 +349,19 @@ impl ParsedConfiguration for SyslogNgConfiguration {
         todo!()
     }
 
+    fn get_objects_as_completion_items(&self) -> Option<CompletionResponse> {
+        let mut response:Vec<CompletionItem> = Vec::new();
+
+        let objects = self.get_objects();
+
+        for obj in objects {
+            let completion = format!("{}({});", &obj.get_kind().to_string(), obj.get_id());
+            let item = SyslogNgConfiguration::transform_grammar_option_to_completion_response(&completion, &completion);
+            response.push(item);
+        }
+        return Some(CompletionResponse::Array(response));
+    }
+
     fn get_code_completion(&self, params: &CompletionParams) -> Option<CompletionResponse> {
         let mut response:Vec<CompletionItem> = Vec::new();
         let mut object_type = String::from("");
@@ -363,7 +382,7 @@ impl ParsedConfiguration for SyslogNgConfiguration {
             Context::Parser => object_type.push_str("parser"),
 
             // Get exsiting object suggestions
-            Context::Log => todo!(),
+            Context::Log => return self.get_objects_as_completion_items(),
 
             Context::Filter => todo!(),
             Context::RewriteRule => todo!(),
