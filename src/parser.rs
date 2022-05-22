@@ -205,8 +205,6 @@ fn parse_value_non_negative_integer(input: &str) -> IResult<&str, ValueTypes> {
 }
 
 fn parse_value_string_or_number(input: &str) -> IResult<&str, ValueTypes> {
-    // let num_or_string: Result<(&str, f64), nom::Err<(&str, ErrorKind)>> =
-
     let (input, double) = 
         alt(((delimited(tag("\""), double, tag("\""))), double))(input)?;
 
