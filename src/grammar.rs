@@ -7,7 +7,7 @@ const CONFIG_OPTIONS_DATABASE: &str = include_str!("../config-options-database/d
 pub static CONFIG_OPTIONS: OnceCell<Value> = OnceCell::new();
 
 pub fn grammar_init() -> () {
-    CONFIG_OPTIONS.set(serde_json::from_str(CONFIG_OPTIONS_DATABASE).unwrap());
+    CONFIG_OPTIONS.set(serde_json::from_str(CONFIG_OPTIONS_DATABASE).unwrap()).unwrap();
 }
 
 fn get_options() -> &'static Value {
