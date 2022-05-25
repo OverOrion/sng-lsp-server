@@ -92,12 +92,9 @@ pub fn grammar_get_all_options(object_type: &str, driver: &str, inner_block: &Op
         let mut current_option = kv_arr.as_array()?.get(0)?.as_str()?;
 
         // option_name1/option_name2/option_name3/...
-        if current_option.contains("/") {
-            let split = current_option.split("/");
-            let vec: Vec<&str> = split.collect();
-
-            current_option = vec[0];
-        } else {}
+        if let Some((first_alias, _)) = current_option.split_once("/") {
+            current_option = first_alias;
+        }
 
         let current_option = current_option;
         let option_type = kv_arr.as_array()?.get(1)?.as_array()?.get(0);
