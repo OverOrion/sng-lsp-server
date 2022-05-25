@@ -96,7 +96,6 @@ pub fn grammar_get_all_options(object_type: &str, driver: &str, inner_block: &Op
             current_option = first_alias;
         }
 
-        let current_option = current_option;
         let option_type = kv_arr.as_array()?.get(1)?.as_array()?.get(0);
 
         if let Some(value) = option_type {
