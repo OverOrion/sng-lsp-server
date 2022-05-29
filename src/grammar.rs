@@ -55,7 +55,7 @@ fn get_possible_values_for_type(object_type: &str) -> Option<Vec<&str>> {
         _ => return None,
     };
 
-    for (name, value) in target.iter() {
+    for (name, _) in target.iter() {
         result.push(name.as_str())
     }
 
@@ -111,4 +111,33 @@ pub fn grammar_get_all_options(object_type: &str, driver: &str, inner_block: &Op
     }
 
     Some(result)
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_remove_surronding_quotes_empty() {
+        let input = "";
+        let without_quotes = remove_surronding_quotes(input);
+
+        assert_eq!(without_quotes, "");
+    }
+
+    #[test]
+    fn test_remove_surronding_quotes_qutoed() {
+        let input = "\"foo\"";
+        let without_quotes = remove_surronding_quotes(input);
+
+        assert_eq!(without_quotes, "foo");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_remove_surronding_quotes_missing_closing_qutoe_panic() {
+        let input = "\"foo";
+        let without_quotes = remove_surronding_quotes(input);
+
+        assert_eq!(without_quotes, "");
+    }
 }

@@ -232,7 +232,7 @@ pub struct SyslogNgConfiguration {
 }
 
 impl SyslogNgConfiguration {
-    fn init_new() -> SyslogNgConfiguration{
+    fn new() -> SyslogNgConfiguration{
         SyslogNgConfiguration{
             configuration: String::new(),
             version: VersionAnnotation{
@@ -253,8 +253,8 @@ impl SyslogNgConfiguration {
         }
     }
 
-    pub fn new() -> Arc<RwLock<SyslogNgConfiguration>> {
-        Arc::new(RwLock::new(SyslogNgConfiguration::init_new()))
+    pub fn new_arc_rw() -> Arc<RwLock<SyslogNgConfiguration>> {
+        Arc::new(RwLock::new(SyslogNgConfiguration::new()))
     }
 
     // pub fn add_configuration(&mut self, conf: &str, URI: &TextDocumentIdentifier) {

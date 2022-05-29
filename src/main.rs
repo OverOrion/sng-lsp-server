@@ -28,7 +28,7 @@ async fn main() {
     #[cfg(feature = "runtime-agnostic")]
     let (stdin, stdout) = (stdin.compat(), stdout.compat_write());
 
-    CONFIGURATION.set(SyslogNgConfiguration::new()).expect("Global initialization failed");
+    CONFIGURATION.set(SyslogNgConfiguration::new_arc_rw()).expect("Global initialization failed");
     
     let (service, messages) = LspService::new(|client| Backend { client, configuration: &CONFIGURATION.get().expect("Acquiring configuration failed") });
     Server::new(stdin, stdout)

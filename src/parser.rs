@@ -529,7 +529,7 @@ mod tests {
 
     /// Helper function for extracting SyslogNgConfiguration from Arc<RwLock<>> for testing purposes
     fn get_syslog_ng_configuration() -> SyslogNgConfiguration {
-        let sng_conf = SyslogNgConfiguration::new();
+        let sng_conf = SyslogNgConfiguration::new_arc_rw();
         extract_from_arc_rw_lock(sng_conf)
     }
 
@@ -601,6 +601,16 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_value_yesno_success() {
+
+        let input = "yes";
+
+        let (_, yesno) = parse_value_yesno(input).unwrap();
+
+        assert_eq!(yesno, ValueTypes::YesNo(true));
+    }
+
+    #[test]
     fn test_parse_value_yesno_failure() {
 
         let input = "10";
@@ -609,6 +619,62 @@ mod tests {
 
         assert!(matches!(res, Err(_)));
 
+    }
+
+    #[test]
+    fn test_parse_value_positive_integer_success() {
+        let input = "182";
+
+        let (input, posint) = parse_value_positive_integer(input).unwrap();
+
+        assert!(input.is_empty());
+        assert_eq!(posint, ValueTypes::PositiveInteger(182));
+    }
+
+    #[test]
+    fn test_parse_value_positive_integer_failure_alpha() {
+        let input = "abcd";
+
+        let res = parse_value_positive_integer(input);
+
+        assert!(matches!(res, Err(_)));
+    }
+
+    #[test]
+    fn test_parse_value_positive_integer_failure_negative() {
+        let input = "-182";
+
+        let res = parse_value_positive_integer(input);
+
+        assert!(matches!(res, Err(_)));
+    }
+
+    #[test]
+    fn test_parse_value_string_or_number_string_success() {
+        let input = "\"182\"";
+
+        let (remainder, string_or_number) = parse_value_string_or_number(input).unwrap();
+
+        assert!(remainder.is_empty());
+        assert_eq!(string_or_number, ValueTypes::StringOrNumber("182".to_string()));
+    }
+
+    #[test]
+    fn test_parse_value_string_or_number_number_success() {
+        let input = "182";
+
+        let (remainder, string_or_number) = parse_value_string_or_number(input).unwrap();
+
+        assert!(remainder.is_empty());
+        assert_eq!(string_or_number, ValueTypes::StringOrNumber(input.to_string()));
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_parse_value_string_or_number_string_failure() {
+        let input = "\"abcd\"";
+
+        let _res = parse_value_string_or_number(input).unwrap();
     }
 
     #[test]
@@ -629,6 +695,20 @@ mod tests {
 
         assert_eq!(object.get_drivers()[0].name, "file");
         assert_eq!(object.get_drivers()[0].required_options[0], ValueTypes::String("/dev/stdin".to_string()));
+    }
+
+    #[test]
+    fn test_parse_object_block_source_object_failure() {
+
+        let input = r###"
+        source s_src {
+            file("/dev/stdin"
+        };
+        "###;
+    
+        let res = parse_object_block(input);
+
+        assert!(matches!(res, Err(_)));
     }
 
     #[test]
@@ -706,10 +786,27 @@ mod tests {
         assert!(remainder.is_empty());
 
         assert_eq!(*object.get_kind(), ObjectKind::Log);
+
+        assert_eq!(object.get_drivers()[0].get_name(), "source");
+        assert_eq!(object.get_drivers()[1].get_name(), "destination");
     }
 
     #[test]
-    fn test_() {
+    fn test_parse_object_block_log_path_object_failure() {
+        let input = r###"
+        log {
+            source(s_loca
+            destination(d_local);
+        };
+        "###;
+
+        let res = parse_object_block(input);
+
+        assert!(matches!(res, Err(_)));
+    }
+
+    #[test]
+    fn test_parse_object_block_source_object_multiple_options() {
         let input = r###"
         source s_network_mine {
             network(
